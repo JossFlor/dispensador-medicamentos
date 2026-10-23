@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend import inventory
 from backend.inference_runner import InferenceError, InferenceTimeout, run_inference
-from backend.schemas import Inventario, RespuestaSolicitud, SolicitudColor
+from backend.schemas import Inventario, RespuestaSolicitud, SolicitudColor, SolicitudReposicion
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,12 +95,12 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
     response_model=Inventario,
     responses={409: {"description": "El dispensador está ocupado con otra orden"}},
 )
-def reponer() -> Inventario:
-    """Restablece todas las bandejas al stock inicial."""
+def reponer(body: SolicitudReposicion | None = None) -> Inventario:
+    """Fija las unidades de las bandejas indicadas. Sin cuerpo, restablece todas al stock inicial."""
     if not _dispensador_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="El dispensador está ocupado con otra orden")
     try:
-        inventario = inventory.reponer()
+        inventario = inventory.reponer(body.stock if body else None)
     finally:
         _dispensador_lock.release()
     logger.info("Inventario repuesto: %s", inventario.model_dump())

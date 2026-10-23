@@ -36,7 +36,7 @@ En la red local del hackathon, usa la IP de tu máquina: `http://<tu-ip>:8000`
 | Zona | Qué muestra |
 |------|-------------|
 | Cabecera | Marca, sucursal, fecha y hora, e indicador *Sistema en línea* / *Sin conexión* |
-| Inventario | Medicamento, bandeja, existencias con barra de nivel y estado (*Disponible*, *Stock bajo* con 1 unidad, *Agotado*). El botón **Reponer stock** devuelve todas las bandejas a 3 unidades |
+| Inventario | Medicamento, bandeja, existencias con barra de nivel y estado (*Disponible*, *Stock bajo* con 1 unidad, *Agotado*). El botón **Reponer stock** abre un formulario donde se marcan las bandejas repuestas y se indican sus unidades |
 | Nueva dispensación | Selección del medicamento, botón de confirmación y progreso en tres pasos con cronómetro |
 | Registro de actividad | Órdenes, entregas, fallos y cortes de conexión de la sesión |
 
@@ -55,7 +55,7 @@ Los medicamentos asociados a cada bandeja se configuran en la lista `MEDICAMENTO
 |--------|------|-------------|
 | `GET` | `/inventario` | Stock actual (`rojo`, `amarillo`, `verde`, `azul`) |
 | `POST` | `/solicitar` | Body: `{"color": "rojo"}`. Ejecuta el robot y descuenta 1 unidad si la entrega tiene éxito |
-| `POST` | `/reponer` | Devuelve todas las bandejas al stock inicial (3). Responde `409` si hay una dispensación en curso |
+| `POST` | `/reponer` | Body: `{"stock": {"rojo": 3, "azul": 5}}`. Fija las unidades (0–20) de las bandejas indicadas; las demás no cambian. Sin body, devuelve todas al stock inicial (3). Responde `409` si hay una dispensación en curso |
 
 Respuestas de `POST /solicitar`:
 
@@ -99,11 +99,11 @@ Cubren la dispensación correcta y su persistencia, color inválido, falta de st
 1. Abrir http://localhost:8000. El indicador muestra *Sistema en línea* y el registro, *Sistema iniciado*.
 2. Señalar el inventario: cuatro medicamentos con existencias y estado, sincronizados cada 2 s.
 3. Seleccionar **Omeprazol 20 mg** y pulsar **Dispensar Omeprazol 20 mg**. Mientras el robot trabaja se ven los pasos *Orden registrada → Dispensando → Entregado* con cronómetro; al terminar, la fila del inventario se resalta y las existencias bajan.
-4. Opcional: dispensar hasta dejar una bandeja en *Stock bajo* o *Agotado* para enseñar las alertas, y pulsar **Reponer stock** para recuperarla.
+4. Opcional: dispensar hasta dejar una bandeja en *Stock bajo* o *Agotado* para enseñar las alertas, y reponerla desde **Reponer stock**.
 5. Opcional: abrir `/docs` y probar `POST /solicitar` para mostrar la API.
 6. Reiniciar el servidor y comprobar que el stock guardado se mantiene.
 
-Antes de presentar, pulsa **Reponer stock** para empezar con todas las bandejas llenas.
+Antes de presentar, abre **Reponer stock**, marca **Seleccionar todas** y confirma para empezar con todas las bandejas llenas.
 
 ## Estructura
 

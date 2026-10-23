@@ -185,6 +185,24 @@ def test_reponer_restablece_todas_las_bandejas(client, inv_path):
     assert read_inv(inv_path) == {color: DEFAULT_STOCK for color in COLORES}
 
 
+def test_reponer_solo_bandejas_seleccionadas(client, inv_path):
+    write_inv(inv_path, rojo=0, amarillo=1, verde=2, azul=0)
+    res = client.post("/reponer", json={"stock": {"rojo": 5, "azul": 2}})
+    assert res.status_code == 200
+    assert res.json() == {"rojo": 5, "amarillo": 1, "verde": 2, "azul": 2}
+    assert read_inv(inv_path) == res.json()
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"stock": {}}, {"stock": {"morado": 3}}, {"stock": {"rojo": -1}}, {"stock": {"rojo": 21}}],
+)
+def test_reponer_valida_cantidades(client, inv_path, body):
+    write_inv(inv_path, rojo=1)
+    assert client.post("/reponer", json=body).status_code == 422
+    assert read_inv(inv_path)["rojo"] == 1
+
+
 def test_reponer_recupera_inventario_corrupto(client, inv_path):
     inv_path.write_text("{no es json")
     assert client.post("/reponer").status_code == 200

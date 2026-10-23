@@ -10,6 +10,7 @@ const POLL_MS = 2000;
 const REQUEST_TIMEOUT_MS = 130_000;
 const STOCK_REFERENCIA = 3;
 const STOCK_BAJO = 1;
+const MAX_STOCK = 20;
 const MAX_LOG = 50;
 const PASOS = ["registrada", "dispensando", "entregada"];
 const NIVELES_LOG = { info: "Info", success: "Correcto", warning: "Aviso", error: "Error" };
@@ -31,6 +32,14 @@ const els = {
   btn: $("dispense-btn"),
   btnLabel: $("dispense-label"),
   restockBtn: $("restock-btn"),
+  restockDialog: $("restock-dialog"),
+  restockForm: $("restock-form"),
+  restockList: $("restock-list"),
+  restockAll: $("restock-all"),
+  restockHint: $("restock-hint"),
+  restockError: $("restock-error"),
+  restockSubmit: $("restock-submit"),
+  restockSubmitLabel: $("restock-submit-label"),
   progress: $("progress"),
   progressTitle: $("progress-title"),
   progressDetail: $("progress-detail"),
@@ -104,7 +113,7 @@ function buildUI() {
     e.preventDefault();
     dispensar();
   });
-  els.restockBtn.addEventListener("click", reponer);
+  buildRestockUI();
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) fetchInventario();
   });
@@ -157,8 +166,6 @@ function render(prev = state.inventario) {
   els.summaryAlerts.dataset.alert = String(alertas > 0);
 
   els.restockBtn.disabled = state.enCurso || state.reponiendo || !state.conectado;
-  els.restockBtn.textContent = state.reponiendo ? "Reponiendo…" : "Reponer stock";
-
   const med = buscarMed(state.seleccion);
   els.btn.disabled = state.enCurso || state.reponiendo || !med || !state.conectado;
   els.btn.classList.toggle("is-loading", state.enCurso);
@@ -298,22 +305,200 @@ async function dispensar() {
   }
 }
 
-async function reponer() {
+const clampStock = (v) => Math.min(MAX_STOCK, Math.max(0, Number.isFinite(v) ? Math.round(v) : 0));
+const filaReposicion = (color) => els.restockList.querySelector(`.restock-row[data-color="${color}"]`);
+const objetivoReposicion = () => STOCK_REFERENCIA;
+
+function buildRestockUI() {
+  els.restockHint.textContent = `Objetivo de reposición: ${STOCK_REFERENCIA} ud. · Máximo: ${MAX_STOCK} ud.`;
+  els.restockList.innerHTML = MEDICAMENTOS.map(
+    (m) => `
+      <li class="restock-row" data-color="${m.color}">
+        <label class="restock-select">
+          <input type="checkbox" value="${m.color}" />
+          <span class="checkbox" aria-hidden="true"></span>
+          <span class="tray-dot" data-color="${m.color}" aria-hidden="true"></span>
+          <span class="option-body">
+            <span class="option-name">${nombreCompleto(m)}</span>
+            <span class="option-meta">${m.bandeja} · Actual: <span class="restock-current">—</span></span>
+          </span>
+        </label>
+        <div class="restock-qty">
+          <span class="restock-delta" aria-hidden="true"></span>
+          <div class="stepper">
+            <button type="button" data-step="-1" aria-label="Quitar una unidad de ${m.nombre}">−</button>
+            <input type="number" min="0" max="${MAX_STOCK}" step="1" inputmode="numeric"
+              aria-label="Unidades de ${m.nombre} tras reponer" />
+            <button type="button" data-step="1" aria-label="Añadir una unidad de ${m.nombre}">+</button>
+          </div>
+        </div>
+      </li>`
+  ).join("");
+
+  els.restockBtn.addEventListener("click", abrirReposicion);
+  els.restockForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    reponer();
+  });
+  els.restockList.addEventListener("change", (e) => {
+    const row = e.target.closest(".restock-row");
+    if (!row) return;
+    const actual = Number(row.dataset.actual);
+    const input = row.querySelector("input[type=number]");
+    if (e.target.type === "number") {
+      input.value = clampStock(input.valueAsNumber);
+      row.querySelector("input[type=checkbox]").checked = true;
+    } else if (e.target.type === "checkbox") {
+      if (e.target.checked) {
+        if (Number(input.value) === actual) input.value = objetivoReposicion();
+      } else {
+        input.value = actual;
+      }
+    }
+    actualizarReposicion();
+  });
+  els.restockList.addEventListener("input", (e) => {
+    if (e.target.type !== "number") return;
+    e.target.closest(".restock-row").querySelector("input[type=checkbox]").checked = true;
+    actualizarReposicion();
+  });
+  els.restockList.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-step]");
+    if (!btn) return;
+    const row = btn.closest(".restock-row");
+    const input = row.querySelector("input[type=number]");
+    input.value = clampStock(input.valueAsNumber + Number(btn.dataset.step));
+    row.querySelector("input[type=checkbox]").checked = true;
+    actualizarReposicion();
+  });
+  els.restockAll.addEventListener("change", () => {
+    for (const cb of els.restockList.querySelectorAll("input[type=checkbox]")) {
+      cb.checked = els.restockAll.checked;
+      const row = cb.closest(".restock-row");
+      const actual = Number(row.dataset.actual);
+      const input = row.querySelector("input[type=number]");
+      input.value = els.restockAll.checked ? objetivoReposicion() : actual;
+    }
+    actualizarReposicion();
+  });
+
+  const cerrar = () => {
+    if (!state.reponiendo) els.restockDialog.close();
+  };
+  els.restockDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", cerrar));
+  els.restockDialog.addEventListener("click", (e) => {
+    if (e.target === els.restockDialog) cerrar();
+  });
+  els.restockDialog.addEventListener("cancel", (e) => {
+    if (state.reponiendo) e.preventDefault();
+  });
+  els.restockDialog.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cerrar();
+    }
+  });
+}
+
+function rellenarModalReposicion() {
+  for (const m of MEDICAMENTOS) {
+    const actual = state.inventario[m.color] ?? 0;
+    const row = filaReposicion(m.color);
+    row.dataset.actual = String(actual);
+    row.querySelector(".restock-current").textContent = `${actual} ud.`;
+    row.querySelector("input[type=checkbox]").checked = false;
+    row.querySelector("input[type=number]").value = actual;
+  }
+}
+
+async function abrirReposicion() {
   if (state.enCurso || state.reponiendo) return;
+  await fetchInventario();
+  rellenarModalReposicion();
+  els.restockError.hidden = true;
+  actualizarReposicion();
+  els.restockDialog.showModal();
+}
+
+function seleccionReposicion() {
+  const stock = {};
+  for (const row of els.restockList.querySelectorAll(".restock-row")) {
+    if (row.querySelector("input[type=checkbox]").checked) {
+      stock[row.dataset.color] = clampStock(row.querySelector("input[type=number]").valueAsNumber);
+    }
+  }
+  return stock;
+}
+
+function actualizarReposicion() {
+  const stock = seleccionReposicion();
+  const n = Object.keys(stock).length;
+
+  for (const row of els.restockList.querySelectorAll(".restock-row")) {
+    const seleccionada = row.dataset.color in stock;
+    const delta = seleccionada ? stock[row.dataset.color] - Number(row.dataset.actual) : 0;
+    const deltaEl = row.querySelector(".restock-delta");
+    row.classList.toggle("is-selected", seleccionada);
+    deltaEl.textContent = delta === 0 ? "" : delta > 0 ? `+${delta}` : String(delta);
+    deltaEl.dataset.sign = delta > 0 ? "up" : delta < 0 ? "down" : "";
+    row.querySelectorAll("input, button").forEach((el) => (el.disabled = state.reponiendo));
+  }
+
+  els.restockAll.checked = n === MEDICAMENTOS.length;
+  els.restockAll.indeterminate = n > 0 && n < MEDICAMENTOS.length;
+  els.restockAll.disabled = state.reponiendo;
+  const hayCambios = Object.entries(stock).some(
+    ([color, qty]) => qty !== Number(filaReposicion(color).dataset.actual)
+  );
+  els.restockSubmit.disabled = state.reponiendo || n === 0 || !hayCambios;
+  els.restockSubmit.classList.toggle("is-loading", state.reponiendo);
+  els.restockSubmitLabel.textContent = state.reponiendo
+    ? "Reponiendo…"
+    : n === 0
+      ? "Seleccione una bandeja"
+      : !hayCambios
+        ? "Sin cambios de stock"
+        : `Reponer ${n} ${n === 1 ? "bandeja" : "bandejas"}`;
+}
+
+async function reponer() {
+  const stock = seleccionReposicion();
+  if (state.enCurso || state.reponiendo || Object.keys(stock).length === 0) return;
+  const antes = { ...state.inventario };
+
   state.reponiendo = true;
+  els.restockError.hidden = true;
+  actualizarReposicion();
   render();
   try {
-    const res = await fetch("/reponer", { method: "POST" });
+    const res = await fetch("/reponer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stock }),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(mensajeError(res, data));
+
     state.inventarioVersion += 1;
     setInventario(data);
-    addLog("Inventario repuesto: todas las bandejas al stock inicial", "success");
+    const cambios = MEDICAMENTOS.filter((m) => m.color in stock)
+      .map((m) =>
+        antes[m.color] === data[m.color]
+          ? `${nombreCompleto(m)} ${data[m.color]} ud. (sin cambios)`
+          : `${nombreCompleto(m)} ${antes[m.color] ?? "—"} → ${data[m.color]} ud.`
+      )
+      .join("; ");
+    addLog(`Reposición: ${cambios}`, "success");
+    state.reponiendo = false;
+    els.restockDialog.close();
   } catch (err) {
     const msg = err instanceof TypeError ? "No se pudo contactar con el servidor." : err.message;
+    els.restockError.textContent = `No se pudo reponer. ${msg}`;
+    els.restockError.hidden = false;
     addLog(`Reposición fallida. ${msg}`, "error");
   } finally {
     state.reponiendo = false;
+    actualizarReposicion();
     render();
   }
 }

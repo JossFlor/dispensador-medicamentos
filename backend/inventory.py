@@ -69,9 +69,17 @@ def validate_stock(color: ColorMedicamento) -> None:
             raise ValueError(f"Sin stock de {color}")
 
 
-def reponer() -> Inventario:
+def reponer(stock: dict[ColorMedicamento, int] | None = None) -> Inventario:
+    """Sets the given trays to the given units, or every tray to DEFAULT_STOCK if none given."""
     with _lock:
-        data = _default_inventario_dict()
+        if stock is None:
+            data = _default_inventario_dict()
+        else:
+            try:
+                data = _read_raw()
+            except InventarioCorrupto:
+                data = _default_inventario_dict()
+            data.update(stock)
         _write_raw(data)
         return Inventario(**data)
 
