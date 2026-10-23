@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dispensación de medicamentos · Farmacias Similares</title>
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">
+          <img src="/logo-simi.png" alt="" width="40" height="40" decoding="async" />
+        </span>
+        <div class="brand-text">
+          <span class="brand-name">Farmacias Similares</span>
+          <span class="brand-sub">Sistema de Dispensación Automatizada</span>
+        </div>
+      </div>
+
+      <div class="topbar-meta">
+        <div class="meta-item">
+          <span class="meta-label">Sucursal</span>
+          <span class="meta-value">Central</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label" id="clock-date">—</span>
+          <span class="meta-value tabular" id="clock-time">—</span>
+        </div>
+        <div class="connection" id="connection" data-state="connecting" role="status">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connection-label">Conectando…</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <div>
+          <h1>Dispensación de medicamentos</h1>
+          <p class="page-lead">
+            Seleccione el medicamento y confirme la orden. El inventario se sincroniza automáticamente con el
+            dispensador.
+          </p>
+        </div>
+        <dl class="summary">
+          <div class="summary-item">
+            <dt>Unidades en stock</dt>
+            <dd class="tabular" id="summary-units">—</dd>
+          </div>
+          <div class="summary-item">
+            <dt>Referencias en alerta</dt>
+            <dd class="tabular" id="summary-alerts">—</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="grid">
+        <section class="panel panel-inventory" aria-labelledby="inv-title">
+          <header class="panel-head">
+            <h2 id="inv-title">Inventario</h2>
+            <div class="panel-actions">
+              <span class="panel-hint" id="last-sync">Sin sincronizar</span>
+              <button type="button" class="btn-secondary" id="restock-btn" disabled>Reponer stock</button>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table class="table inv-table">
+              <thead>
+                <tr>
+                  <th scope="col">Medicamento</th>
+                  <th scope="col">Ubicación</th>
+                  <th scope="col">Existencias</th>
+                  <th scope="col">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-rows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-dispense" aria-labelledby="disp-title">
+          <header class="panel-head">
+            <h2 id="disp-title">Nueva dispensación</h2>
+          </header>
+          <form class="dispense" id="dispense-form">
+            <fieldset class="med-options" id="med-options">
+              <legend class="field-label">Medicamento</legend>
+            </fieldset>
+
+            <div class="progress" id="progress" hidden aria-live="polite">
+              <div class="progress-head">
+                <span class="progress-title" id="progress-title"></span>
+                <span class="progress-timer tabular" id="progress-timer">00:00</span>
+              </div>
+              <ol class="steps">
+                <li class="step" data-state="pending">
+                  <span class="step-dot" aria-hidden="true"></span>
+                  <span class="step-label">Orden registrada</span>
+                </li>
+                <li class="step" data-state="pending">
+                  <span class="step-dot" aria-hidden="true"></span>
+                  <span class="step-label">Dispensando</span>
+                </li>
+                <li class="step" data-state="pending">
+                  <span class="step-dot" aria-hidden="true"></span>
+                  <span class="step-label">Entregado</span>
+                </li>
+              </ol>
+              <p class="progress-detail" id="progress-detail"></p>
+            </div>
+
+            <div class="dispense-actions">
+              <button type="submit" class="btn-primary" id="dispense-btn" disabled>
+                <span class="spinner" aria-hidden="true"></span>
+                <span id="dispense-label">Seleccione un medicamento</span>
+              </button>
+              <p class="form-note">Verifique medicamento y dosis antes de confirmar la dispensación.</p>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel panel-log" aria-labelledby="log-title">
+          <header class="panel-head">
+            <h2 id="log-title">Registro de actividad</h2>
+            <span class="panel-hint">Sesión actual</span>
+          </header>
+          <div class="table-wrap log-wrap">
+            <table class="table log-table">
+              <thead>
+                <tr>
+                  <th scope="col">Hora</th>
+                  <th scope="col">Evento</th>
+                  <th scope="col">Resultado</th>
+                </tr>
+              </thead>
+              <tbody id="log-rows" role="log" aria-live="polite"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>Uso exclusivo de personal autorizado</span>
+      <span>Farmacias Similares · Sistema de Dispensación Automatizada · v1.0</span>
+    </footer>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
