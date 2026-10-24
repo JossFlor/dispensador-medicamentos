@@ -1,7 +1,11 @@
 {
   "follower_port": "",
   "follower_config": "so-arm101.json",
-  "policy_ref": "InakiAM/cubo_rojo_v4",
+  "policy_ref": "InakiAM/cubo_rojo_v4@root",
+  "policies_by_color": {
+    "rojo": "InakiAM/cubo_rojo_v4@root",
+    "amarillo": "InakiAM/cubo_amarillo_v1@root"
+  },
   "task": "",
   "duration_s": 60,
   "cameras": {

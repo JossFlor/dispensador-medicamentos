@@ -61,13 +61,21 @@ def _http_json(
         raise RuntimeError(f"LeLab {path} → HTTP {e.code}: {detail}") from e
 
 
+def _policy_ref(config: dict[str, Any], color: str) -> str:
+    policies = config.get("policies_by_color") or {}
+    ref = policies.get(color) or ""
+    if not ref:
+        raise RuntimeError(f"No hay modelo de LeLab configurado para el color {color}")
+    return ref
+
+
 def _lelab_payload(config: dict[str, Any], color: str) -> dict[str, Any]:
     tasks = config.get("tasks_by_color") or {}
     task = tasks.get(color, config.get("task", ""))
     return {
         "follower_port": config["follower_port"],
         "follower_config": config["follower_config"],
-        "policy_ref": config["policy_ref"],
+        "policy_ref": _policy_ref(config, color),
         "task": task,
         "cameras": config["cameras"],
         "duration_s": int(config.get("duration_s", 60)),
@@ -77,6 +85,7 @@ def _lelab_payload(config: dict[str, Any], color: str) -> dict[str, Any]:
 def run_lelab(color: str, base_url: str, config_path: Path) -> int:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     payload = _lelab_payload(config, color)
+    print(f"LeLab {color}: {payload['policy_ref']}", flush=True)
     duration_s = payload["duration_s"]
     poll_deadline = time.time() + duration_s + 90
 
