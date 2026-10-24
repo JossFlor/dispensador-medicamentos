@@ -1,32 +1,18 @@
-import {
-  STOCK_REFERENCIA,
-  cargarCatalogo,
-  estadoStock,
-  filaInventarioHTML,
-  fmtDate,
-  fmtTime,
-  nombreCompleto,
-  pintarFilaInventario,
-  sleep,
-} from "./comun.js";
+import { cargarCatalogo, fmtDate, fmtTime, nombreCompleto, sleep } from "./comun.js";
 
 // Loaded from GET /medicamentos; `color` identifies the tray for the API and the robot.
 let MEDICAMENTOS = [];
 
 const POLL_MS = 2000;
 const REQUEST_TIMEOUT_MS = 210_000;
-const MAX_STOCK = 20;
-const MAX_LOG = 50;
 const MAX_TEXTO_OCR_UI = 160;
 const PASOS = ["registrada", "dispensando", "entregada"];
-const NIVELES_LOG = { info: "Info", success: "Correcto", warning: "Aviso", error: "Error" };
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 const state = {
   inventario: {},
   seleccion: null,
   enCurso: false,
-  reponiendo: false,
   conectado: null,
   inventarioVersion: 0,
   escuchando: false,
@@ -39,32 +25,21 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  rows: $("inventory-rows"),
   form: $("dispense-form"),
   options: $("med-options"),
   btn: $("dispense-btn"),
   btnLabel: $("dispense-label"),
-  restockBtn: $("restock-btn"),
-  restockDialog: $("restock-dialog"),
-  restockForm: $("restock-form"),
-  restockList: $("restock-list"),
-  restockAll: $("restock-all"),
-  restockHint: $("restock-hint"),
-  restockError: $("restock-error"),
-  restockSubmit: $("restock-submit"),
-  restockSubmitLabel: $("restock-submit-label"),
   progress: $("progress"),
   progressTitle: $("progress-title"),
   progressDetail: $("progress-detail"),
   progressTimer: $("progress-timer"),
-  log: $("log-rows"),
   connection: $("connection"),
   connectionLabel: $("connection-label"),
-  lastSync: $("last-sync"),
   clockDate: $("clock-date"),
   clockTime: $("clock-time"),
-  summaryUnits: $("summary-units"),
-  summaryAlerts: $("summary-alerts"),
+  robotState: $("robot-state"),
+  robotStateLabel: $("robot-state-label"),
+  robotCurrent: $("robot-current"),
   voiceBtn: $("voice-btn"),
   voiceLabel: $("voice-label"),
   voiceSub: $("voice-sub"),
@@ -90,8 +65,6 @@ const els = {
 const buscarMed = (color) => MEDICAMENTOS.find((m) => m.color === color);
 
 function buildUI() {
-  els.rows.innerHTML = MEDICAMENTOS.map(filaInventarioHTML).join("");
-
   els.options.insertAdjacentHTML(
     "beforeend",
     MEDICAMENTOS.map(
@@ -109,43 +82,21 @@ function buildUI() {
     ).join("")
   );
 
-  els.log.innerHTML = `<tr class="log-empty"><td colspan="3">Sin actividad registrada en esta sesión.</td></tr>`;
-
-  els.rows.addEventListener("animationend", (e) => e.target.classList.remove("is-updated"));
   els.options.addEventListener("change", (e) => seleccionar(e.target.value));
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
     dispensar();
   });
   buildAsistenteUI();
-  buildRestockUI();
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) fetchInventario();
+    if (!document.hidden) fetchEstado();
   });
 }
 
-function render(prev = state.inventario) {
-  let unidades = 0;
-  let alertas = 0;
-  let conocido = false;
-
+function render() {
   for (const m of MEDICAMENTOS) {
     const n = state.inventario[m.color];
     const tieneDato = Number.isInteger(n);
-    const row = els.rows.querySelector(`tr[data-color="${m.color}"]`);
-    const est = pintarFilaInventario(row, n);
-    if (est) {
-      conocido = true;
-      unidades += n;
-      if (est.clave !== "ok") alertas += 1;
-    }
-    row.classList.toggle("is-active", state.enCurso && state.seleccion === m.color);
-    if (tieneDato && Number.isInteger(prev[m.color]) && n < prev[m.color]) {
-      row.classList.remove("is-updated");
-      void row.offsetWidth;
-      row.classList.add("is-updated");
-    }
-
     const opt = els.options.querySelector(`.med-option[data-color="${m.color}"]`);
     const input = opt.querySelector("input");
     const sinStock = !tieneDato || n <= 0;
@@ -155,16 +106,11 @@ function render(prev = state.inventario) {
     opt.classList.toggle("is-selected", input.checked);
     opt.classList.toggle("is-disabled", input.disabled);
     opt.dataset.empty = String(tieneDato && n <= 0);
-    opt.querySelector(".option-stock").textContent = !tieneDato ? "—" : n > 0 ? `${n} ud.` : "Agotado";
+    opt.querySelector(".option-stock").textContent = tieneDato && n <= 0 ? "Agotado" : "";
   }
 
-  els.summaryUnits.textContent = conocido ? String(unidades) : "—";
-  els.summaryAlerts.textContent = conocido ? String(alertas) : "—";
-  els.summaryAlerts.dataset.alert = String(alertas > 0);
-
-  els.restockBtn.disabled = state.enCurso || state.reponiendo || !state.conectado;
   const med = buscarMed(state.seleccion);
-  els.btn.disabled = state.enCurso || state.reponiendo || !med || !state.conectado;
+  els.btn.disabled = state.enCurso || !med || !state.conectado;
   els.btn.classList.toggle("is-loading", state.enCurso);
   els.btnLabel.textContent = state.enCurso
     ? "Dispensando…"
@@ -175,7 +121,7 @@ function render(prev = state.inventario) {
         : "Seleccione un medicamento";
   els.rxChip.hidden = !(med && state.receta?.color === med.color);
 
-  const ocupado = state.enCurso || state.reponiendo || !state.conectado;
+  const ocupado = state.enCurso || !state.conectado;
   els.voiceBtn.disabled = !SpeechRecognition || state.interpretandoVoz || (ocupado && !state.escuchando);
   els.voiceBtn.classList.toggle("is-listening", state.escuchando);
   els.voiceLabel.textContent = !SpeechRecognition
@@ -197,33 +143,36 @@ function render(prev = state.inventario) {
 }
 
 function setInventario(nuevo) {
-  const prev = state.inventario;
   state.inventario = nuevo;
-  render(prev);
+  render();
 }
 
-function addLog(evento, nivel = "info") {
-  els.log.querySelector(".log-empty")?.remove();
-  const tr = document.createElement("tr");
-  tr.innerHTML = `<td class="log-time"></td><td class="log-event"></td><td class="log-result"><span class="badge"></span></td>`;
-  tr.cells[0].textContent = fmtTime(new Date());
-  tr.cells[1].textContent = evento;
-  const badge = tr.querySelector(".badge");
-  badge.dataset.state = nivel;
-  badge.textContent = NIVELES_LOG[nivel];
-  els.log.prepend(tr);
-  while (els.log.rows.length > MAX_LOG) els.log.deleteRow(-1);
+function addLog() {}
+
+let ultimoEstado = null;
+
+function pintarRobot(estado) {
+  if (estado) ultimoEstado = estado;
+  if (!state.conectado) {
+    els.robotState.dataset.state = "offline";
+    els.robotStateLabel.textContent = "Sin conexión";
+    els.robotCurrent.textContent = "—";
+    return;
+  }
+  const local = state.enCurso ? buscarMed(state.seleccion) : null;
+  const enCurso = local || buscarMed(ultimoEstado?.dispensando);
+  const ocupado = state.enCurso || Boolean(ultimoEstado?.robot_ocupado);
+  els.robotState.dataset.state = ocupado ? "ocupado" : "libre";
+  els.robotStateLabel.textContent = ocupado ? "Dispensando" : "Disponible";
+  els.robotCurrent.textContent = enCurso ? nombreCompleto(enCurso) : "Ninguna";
 }
 
-function setConexion(ok, detalle) {
+function setConexion(ok) {
   if (state.conectado === ok) return;
-  const antes = state.conectado;
   state.conectado = ok;
   els.connection.dataset.state = ok ? "online" : "offline";
   els.connectionLabel.textContent = ok ? "Sistema en línea" : "Sin conexión";
-  if (!ok) addLog(`Conexión con el dispensador perdida (${detalle})`, "error");
-  else if (antes === false) addLog("Conexión con el dispensador restablecida", "success");
-  else addLog("Sistema iniciado. Esperando órdenes de dispensación.");
+  if (!ok) pintarRobot(null);
   render();
 }
 
@@ -260,17 +209,17 @@ function mensajeError(res, data) {
   return Array.isArray(detail) ? detail.map((d) => d.msg).join(", ") : String(detail);
 }
 
-async function fetchInventario() {
+async function fetchEstado() {
   const version = state.inventarioVersion;
   try {
-    const res = await fetch("/inventario", { cache: "no-store" });
+    const res = await fetch("/estado", { cache: "no-store" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     setConexion(true);
-    els.lastSync.textContent = `Sincronizado ${fmtTime(new Date())}`;
-    if (version === state.inventarioVersion) setInventario(data);
-  } catch (err) {
-    setConexion(false, err instanceof TypeError ? "servidor no disponible" : err.message);
+    if (version === state.inventarioVersion) setInventario(data.inventario);
+    pintarRobot(data);
+  } catch {
+    setConexion(false);
   }
 }
 
@@ -317,6 +266,7 @@ async function dispensarCola(cola) {
   state.enCurso = true;
   state.seleccion = cola[0].color;
   render();
+  pintarRobot();
   iniciarCronometro();
 
   let entregados = 0;
@@ -353,7 +303,8 @@ async function dispensarCola(cola) {
     detenerCronometro();
     state.enCurso = false;
     render();
-    fetchInventario();
+    pintarRobot();
+    fetchEstado();
   }
 }
 
@@ -655,204 +606,6 @@ function confirmarCola() {
   dispensarCola(cola);
 }
 
-const clampStock = (v) => Math.min(MAX_STOCK, Math.max(0, Number.isFinite(v) ? Math.round(v) : 0));
-const filaReposicion = (color) => els.restockList.querySelector(`.restock-row[data-color="${color}"]`);
-const objetivoReposicion = () => STOCK_REFERENCIA;
-
-function buildRestockUI() {
-  els.restockHint.textContent = `Objetivo de reposición: ${STOCK_REFERENCIA} ud. · Máximo: ${MAX_STOCK} ud.`;
-  els.restockList.innerHTML = MEDICAMENTOS.map(
-    (m) => `
-      <li class="restock-row" data-color="${m.color}">
-        <label class="restock-select">
-          <input type="checkbox" value="${m.color}" />
-          <span class="checkbox" aria-hidden="true"></span>
-          <span class="tray-dot" data-color="${m.color}" aria-hidden="true"></span>
-          <span class="option-body">
-            <span class="option-name">${nombreCompleto(m)}</span>
-            <span class="option-meta">${m.bandeja} · Actual: <span class="restock-current">—</span></span>
-          </span>
-        </label>
-        <div class="restock-qty">
-          <span class="restock-delta" aria-hidden="true"></span>
-          <div class="stepper">
-            <button type="button" data-step="-1" aria-label="Quitar una unidad de ${m.nombre}">−</button>
-            <input type="number" min="0" max="${MAX_STOCK}" step="1" inputmode="numeric"
-              aria-label="Unidades de ${m.nombre} tras reponer" />
-            <button type="button" data-step="1" aria-label="Añadir una unidad de ${m.nombre}">+</button>
-          </div>
-        </div>
-      </li>`
-  ).join("");
-
-  els.restockBtn.addEventListener("click", abrirReposicion);
-  els.restockForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    reponer();
-  });
-  els.restockList.addEventListener("change", (e) => {
-    const row = e.target.closest(".restock-row");
-    if (!row) return;
-    const actual = Number(row.dataset.actual);
-    const input = row.querySelector("input[type=number]");
-    if (e.target.type === "number") {
-      input.value = clampStock(input.valueAsNumber);
-      row.querySelector("input[type=checkbox]").checked = true;
-    } else if (e.target.type === "checkbox") {
-      if (e.target.checked) {
-        if (Number(input.value) === actual) input.value = objetivoReposicion();
-      } else {
-        input.value = actual;
-      }
-    }
-    actualizarReposicion();
-  });
-  els.restockList.addEventListener("input", (e) => {
-    if (e.target.type !== "number") return;
-    e.target.closest(".restock-row").querySelector("input[type=checkbox]").checked = true;
-    actualizarReposicion();
-  });
-  els.restockList.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-step]");
-    if (!btn) return;
-    const row = btn.closest(".restock-row");
-    const input = row.querySelector("input[type=number]");
-    input.value = clampStock(input.valueAsNumber + Number(btn.dataset.step));
-    row.querySelector("input[type=checkbox]").checked = true;
-    actualizarReposicion();
-  });
-  els.restockAll.addEventListener("change", () => {
-    for (const cb of els.restockList.querySelectorAll("input[type=checkbox]")) {
-      cb.checked = els.restockAll.checked;
-      const row = cb.closest(".restock-row");
-      const actual = Number(row.dataset.actual);
-      const input = row.querySelector("input[type=number]");
-      input.value = els.restockAll.checked ? objetivoReposicion() : actual;
-    }
-    actualizarReposicion();
-  });
-
-  const cerrar = () => {
-    if (!state.reponiendo) els.restockDialog.close();
-  };
-  els.restockDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", cerrar));
-  els.restockDialog.addEventListener("click", (e) => {
-    if (e.target === els.restockDialog) cerrar();
-  });
-  els.restockDialog.addEventListener("cancel", (e) => {
-    if (state.reponiendo) e.preventDefault();
-  });
-  els.restockDialog.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      cerrar();
-    }
-  });
-}
-
-function rellenarModalReposicion() {
-  for (const m of MEDICAMENTOS) {
-    const actual = state.inventario[m.color] ?? 0;
-    const row = filaReposicion(m.color);
-    row.dataset.actual = String(actual);
-    row.querySelector(".restock-current").textContent = `${actual} ud.`;
-    row.querySelector("input[type=checkbox]").checked = false;
-    row.querySelector("input[type=number]").value = actual;
-  }
-}
-
-async function abrirReposicion() {
-  if (state.enCurso || state.reponiendo) return;
-  await fetchInventario();
-  rellenarModalReposicion();
-  els.restockError.hidden = true;
-  actualizarReposicion();
-  els.restockDialog.showModal();
-}
-
-function seleccionReposicion() {
-  const stock = {};
-  for (const row of els.restockList.querySelectorAll(".restock-row")) {
-    if (row.querySelector("input[type=checkbox]").checked) {
-      stock[row.dataset.color] = clampStock(row.querySelector("input[type=number]").valueAsNumber);
-    }
-  }
-  return stock;
-}
-
-function actualizarReposicion() {
-  const stock = seleccionReposicion();
-  const n = Object.keys(stock).length;
-
-  for (const row of els.restockList.querySelectorAll(".restock-row")) {
-    const seleccionada = row.dataset.color in stock;
-    const delta = seleccionada ? stock[row.dataset.color] - Number(row.dataset.actual) : 0;
-    const deltaEl = row.querySelector(".restock-delta");
-    row.classList.toggle("is-selected", seleccionada);
-    deltaEl.textContent = delta === 0 ? "" : delta > 0 ? `+${delta}` : String(delta);
-    deltaEl.dataset.sign = delta > 0 ? "up" : delta < 0 ? "down" : "";
-    row.querySelectorAll("input, button").forEach((el) => (el.disabled = state.reponiendo));
-  }
-
-  els.restockAll.checked = n === MEDICAMENTOS.length;
-  els.restockAll.indeterminate = n > 0 && n < MEDICAMENTOS.length;
-  els.restockAll.disabled = state.reponiendo;
-  const hayCambios = Object.entries(stock).some(
-    ([color, qty]) => qty !== Number(filaReposicion(color).dataset.actual)
-  );
-  els.restockSubmit.disabled = state.reponiendo || n === 0 || !hayCambios;
-  els.restockSubmit.classList.toggle("is-loading", state.reponiendo);
-  els.restockSubmitLabel.textContent = state.reponiendo
-    ? "Reponiendo…"
-    : n === 0
-      ? "Seleccione una bandeja"
-      : !hayCambios
-        ? "Sin cambios de stock"
-        : `Reponer ${n} ${n === 1 ? "bandeja" : "bandejas"}`;
-}
-
-async function reponer() {
-  const stock = seleccionReposicion();
-  if (state.enCurso || state.reponiendo || Object.keys(stock).length === 0) return;
-  const antes = { ...state.inventario };
-
-  state.reponiendo = true;
-  els.restockError.hidden = true;
-  actualizarReposicion();
-  render();
-  try {
-    const res = await fetch("/reponer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stock }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(mensajeError(res, data));
-
-    state.inventarioVersion += 1;
-    setInventario(data);
-    const cambios = MEDICAMENTOS.filter((m) => m.color in stock)
-      .map((m) =>
-        antes[m.color] === data[m.color]
-          ? `${nombreCompleto(m)} ${data[m.color]} ud. (sin cambios)`
-          : `${nombreCompleto(m)} ${antes[m.color] ?? "—"} → ${data[m.color]} ud.`
-      )
-      .join("; ");
-    addLog(`Reposición: ${cambios}`, "success");
-    state.reponiendo = false;
-    els.restockDialog.close();
-  } catch (err) {
-    const msg = err instanceof TypeError ? "No se pudo contactar con el servidor." : err.message;
-    els.restockError.textContent = `No se pudo reponer. ${msg}`;
-    els.restockError.hidden = false;
-    addLog(`Reposición fallida. ${msg}`, "error");
-  } finally {
-    state.reponiendo = false;
-    actualizarReposicion();
-    render();
-  }
-}
-
 function tickReloj() {
   const now = new Date();
   els.clockDate.textContent = fmtDate(now);
@@ -868,15 +621,15 @@ async function iniciar() {
       MEDICAMENTOS = await cargarCatalogo();
       break;
     } catch (err) {
-      setConexion(false, err instanceof TypeError ? "servidor no disponible" : err.message);
+      setConexion(false);
       await sleep(POLL_MS);
     }
   }
   buildUI();
   render();
-  fetchInventario();
+  fetchEstado();
   setInterval(() => {
-    if (!document.hidden) fetchInventario();
+    if (!document.hidden) fetchEstado();
   }, POLL_MS);
 }
 

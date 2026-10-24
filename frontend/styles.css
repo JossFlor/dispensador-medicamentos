@@ -251,6 +251,26 @@ body {
   color: var(--warning);
 }
 
+.page:has(.kiosk) .page-head {
+  width: min(720px, 100%);
+  margin-inline: auto;
+}
+
+.kiosk {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.kiosk .panel-robot,
+.kiosk .panel-dispense {
+  position: static;
+  grid-area: auto;
+  width: 100%;
+}
+
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr);
@@ -1127,7 +1147,7 @@ body {
   align-items: start;
 }
 
-.panel-robot {
+.grid-gerente .panel-robot {
   grid-area: robot;
 }
 

@@ -64,7 +64,10 @@
         <section class="panel panel-inventory" aria-labelledby="inv-title">
           <header class="panel-head">
             <h2 id="inv-title">Inventario</h2>
-            <span class="panel-hint" id="last-sync">Sin sincronizar</span>
+            <div class="panel-actions">
+              <span class="panel-hint" id="last-sync">Sin sincronizar</span>
+              <button type="button" class="btn-secondary" id="restock-btn" disabled>Reponer stock</button>
+            </div>
           </header>
           <div class="table-wrap">
             <table class="table inv-table">
@@ -148,6 +151,40 @@
         </section>
       </div>
     </main>
+
+    <dialog class="modal" id="restock-dialog" aria-labelledby="restock-title">
+      <form class="modal-form" id="restock-form" novalidate>
+        <header class="modal-head">
+          <div>
+            <h2 id="restock-title">Reponer stock</h2>
+            <p class="modal-lead">
+              El valor parte del stock actual en inventario. Marque las bandejas repuestas y ajuste hasta la cantidad que quedará.
+            </p>
+          </div>
+          <button type="button" class="modal-close" data-close aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+        <div class="restock-toolbar">
+          <label class="check">
+            <input type="checkbox" id="restock-all" />
+            <span>Seleccionar todas</span>
+          </label>
+          <span class="restock-hint" id="restock-hint"></span>
+        </div>
+        <ul class="restock-list" id="restock-list"></ul>
+        <p class="modal-error" id="restock-error" role="alert" hidden></p>
+        <footer class="modal-foot">
+          <button type="button" class="btn-secondary btn-lg" data-close>Cancelar</button>
+          <button type="submit" class="btn-primary btn-compact" id="restock-submit" disabled>
+            <span class="spinner" aria-hidden="true"></span>
+            <span id="restock-submit-label">Seleccione una bandeja</span>
+          </button>
+        </footer>
+      </form>
+    </dialog>
 
     <footer class="footer">
       <span>Uso exclusivo de gerencia</span>
