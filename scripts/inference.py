@@ -15,7 +15,18 @@ from typing import Any
 VALID_COLORS = ("rojo", "amarillo", "verde", "azul")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LELAB_CONFIG = PROJECT_ROOT / "data" / "lelab_inference.json"
+LELAB_CONFIG_MAC = PROJECT_ROOT / "data" / "lelab_inference.mac.json"
 DEFAULT_LELAB_URL = "http://127.0.0.1:8000"
+
+
+def config_lelab() -> Path:
+    """Linux keeps data/lelab_inference.json. The Mac uses its own file so the USB port does not collide."""
+    chosen = os.environ.get("LELAB_CONFIG")
+    if chosen:
+        return Path(chosen)
+    if sys.platform == "darwin" and LELAB_CONFIG_MAC.is_file():
+        return LELAB_CONFIG_MAC
+    return LELAB_CONFIG
 
 
 def _http_json(
@@ -118,7 +129,7 @@ def main() -> int:
     )
 
     if use_lelab:
-        config_path = Path(os.environ.get("LELAB_CONFIG", str(LELAB_CONFIG)))
+        config_path = config_lelab()
         if not config_path.is_file():
             print(f"No se encontró configuración LeLab: {config_path}", file=sys.stderr)
             return 1

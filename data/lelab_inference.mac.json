@@ -1,0 +1,31 @@
+{
+  "follower_port": "",
+  "follower_config": "so-arm101.json",
+  "policy_ref": "InakiAM/cubo_rojo_v4",
+  "task": "",
+  "duration_s": 60,
+  "cameras": {
+    "Robot": {
+      "type": "opencv",
+      "camera_index": 0,
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "rotation": 0
+    },
+    "Webcam": {
+      "type": "opencv",
+      "camera_index": 1,
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "rotation": 0
+    }
+  },
+  "tasks_by_color": {
+    "rojo": "",
+    "amarillo": "",
+    "verde": "",
+    "azul": ""
+  }
+}

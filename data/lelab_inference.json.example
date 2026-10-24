@@ -1,7 +1,7 @@
 {
   "follower_port": "/dev/ttyACM1",
   "follower_config": "so-arm101.json",
-  "policy_ref": "InakiAM/cubo_v1@root",
+  "policy_ref": "InakiAM/cubo_rojo_v4",
   "task": "",
   "duration_s": 60,
   "cameras": {
