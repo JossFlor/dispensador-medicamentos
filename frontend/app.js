@@ -66,6 +66,7 @@ const els = {
   summaryAlerts: $("summary-alerts"),
   voiceBtn: $("voice-btn"),
   voiceLabel: $("voice-label"),
+  voiceSub: $("voice-sub"),
   rxBtn: $("rx-btn"),
   rxInput: $("rx-input"),
   assistStatus: $("assist-status"),
@@ -174,10 +175,15 @@ function render(prev = state.inventario) {
   els.voiceLabel.textContent = !SpeechRecognition
     ? "Voz no disponible"
     : state.escuchando
-      ? "Escuchando… pulse para terminar"
+      ? "Escuchando…"
       : state.interpretandoVoz
         ? "Interpretando…"
         : "Pedir por voz";
+  els.voiceSub.textContent = !SpeechRecognition
+    ? "Use Chrome o Edge"
+    : state.escuchando
+      ? "Pulse para terminar"
+      : "Diga el medicamento";
   els.rxBtn.disabled = ocupado || state.validandoReceta;
   els.rxValidate.disabled = ocupado || state.validandoReceta || !state.rxArchivo;
   els.rxValidate.textContent = state.validandoReceta ? "Leyendo receta…" : "Validar con IA";
@@ -356,53 +362,102 @@ function buildAsistenteUI() {
 }
 
 const ERRORES_VOZ = {
-  "not-allowed": "Permiso de micrófono denegado. Actívelo en el navegador.",
-  "service-not-allowed": "Permiso de micrófono denegado. Actívelo en el navegador.",
-  "no-speech": "No se detectó voz. Pulse de nuevo y diga el medicamento.",
-  "audio-capture": "No se encontró ningún micrófono.",
-  network: "El reconocimiento de voz necesita internet (Google Chrome o Edge).",
+  "not-allowed": "Permiso de micrófono denegado. En Chrome: el candado de la barra de dirección → Micrófono → Permitir.",
+  "service-not-allowed": "Permiso de micrófono denegado. En Chrome: el candado de la barra de dirección → Micrófono → Permitir.",
+  "no-speech": "No se detectó voz. Hable más cerca del micrófono y pulse de nuevo.",
+  "audio-capture": "No se encontró ningún micrófono. Revise la entrada de sonido del sistema.",
+  network: "El reconocimiento de voz necesita internet y Google Chrome o Edge.",
 };
 
 let reconocimiento = null;
+let flujoMic = null;
+let seguirEscuchando = false;
+let textoOido = "";
+let errorVoz = null;
 
-function alternarVoz() {
+function liberarMic() {
+  flujoMic?.getTracks().forEach((track) => track.stop());
+  flujoMic = null;
+}
+
+function arrancarReconocimiento() {
+  reconocimiento = new SpeechRecognition();
+  reconocimiento.lang = "es-ES";
+  reconocimiento.interimResults = true;
+  // Stays open until the user taps again. The default (one short utterance) ends
+  // with "no speech" before most people start talking.
+  reconocimiento.continuous = true;
+  reconocimiento.maxAlternatives = 3;
+
+  reconocimiento.onresult = (e) => {
+    textoOido = Array.from(e.results, (r) => r[0].transcript).join(" ").trim();
+    errorVoz = null;
+    setAsistente("info", `«${textoOido}»`);
+  };
+  reconocimiento.onerror = (e) => {
+    // Chrome ends the session with no-speech on silence; onend restarts it while listening.
+    if (e.error === "no-speech" || e.error === "aborted") return;
+    errorVoz = ERRORES_VOZ[e.error] ?? `Error de reconocimiento de voz (${e.error}).`;
+    seguirEscuchando = false;
+  };
+  reconocimiento.onend = () => {
+    if (seguirEscuchando) {
+      try {
+        reconocimiento.start();
+        return;
+      } catch {
+        // A start() that races with the previous session falls through and stops.
+      }
+    }
+    const texto = textoOido;
+    const fallo = errorVoz;
+    state.escuchando = false;
+    liberarMic();
+    render();
+    if (fallo) setAsistente("error", fallo);
+    else if (texto) interpretarVoz(texto);
+    else setAsistente("warning", ERRORES_VOZ["no-speech"]);
+  };
+
+  reconocimiento.start();
+}
+
+async function alternarVoz() {
   if (state.escuchando) {
+    seguirEscuchando = false;
     reconocimiento?.stop();
     return;
   }
   if (!SpeechRecognition || state.enCurso) return;
+  if (!window.isSecureContext) {
+    setAsistente(
+      "error",
+      "Chrome no entrega el micrófono en http://192.168…. Abra http://localhost:8080 en el equipo del micrófono."
+    );
+    return;
+  }
 
-  reconocimiento = new SpeechRecognition();
-  reconocimiento.lang = "es-ES";
-  reconocimiento.interimResults = true;
-  reconocimiento.continuous = false;
-  reconocimiento.maxAlternatives = 1;
-
-  let textoFinal = "";
-  let error = null;
-  reconocimiento.onresult = (e) => {
-    const texto = Array.from(e.results, (r) => r[0].transcript).join(" ").trim();
-    if (e.results[e.results.length - 1].isFinal) textoFinal = texto;
-    setAsistente("info", `«${texto}»`);
-  };
-  reconocimiento.onerror = (e) => {
-    if (e.error !== "aborted") error = ERRORES_VOZ[e.error] ?? `Error de reconocimiento de voz (${e.error}).`;
-  };
-  reconocimiento.onend = () => {
-    state.escuchando = false;
-    render();
-    if (error) setAsistente("error", error);
-    else if (textoFinal) interpretarVoz(textoFinal);
-    else setAsistente("warning", ERRORES_VOZ["no-speech"]);
-  };
-
+  textoOido = "";
+  errorVoz = null;
   try {
-    reconocimiento.start();
+    // Primes the microphone. Speech recognition alone often starts without audio and reports no speech.
+    flujoMic = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch {
+    setAsistente("error", ERRORES_VOZ["not-allowed"]);
+    return;
+  }
+
+  seguirEscuchando = true;
+  try {
+    arrancarReconocimiento();
+  } catch {
+    seguirEscuchando = false;
+    liberarMic();
+    setAsistente("error", "No se pudo iniciar el reconocimiento de voz.");
     return;
   }
   state.escuchando = true;
-  setAsistente("info", "Escuchando… diga el medicamento, por ejemplo «Paracetamol».");
+  setAsistente("info", "Escuchando… diga el medicamento, por ejemplo «Paracetamol», y pulse otra vez para terminar.");
   render();
 }
 

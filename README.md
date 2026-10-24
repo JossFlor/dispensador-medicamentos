@@ -75,7 +75,7 @@ python scripts/inference.py --lelab --color azul
 | No se pudo conectar a LeLab | Terminal 1: `lelab` debe estar corriendo antes de dispensar |
 | Permiso denegado en `/dev/ttyACM*` | `sudo usermod -aG dialout $USER` y cerrar sesión, o reglas udev del SO-101 |
 | `Form data requires "python-multipart"` al arrancar | Faltan dependencias nuevas: `pip install -r requirements.txt` |
-| *Tesseract no está instalado* al validar receta | `sudo apt install -y tesseract-ocr tesseract-ocr-spa` |
+| *Tesseract no está instalado* al validar receta | Linux: `sudo apt install -y tesseract-ocr tesseract-ocr-spa`. Mac: `brew install tesseract tesseract-lang` |
 | Voz: *El reconocimiento de voz necesita internet* | Usar Google Chrome (Chromium de Linux no trae el servicio de voz) |
 
 ## Instalación

@@ -40,7 +40,7 @@ function setConexion(ok) {
   els.connectionLabel.textContent = ok ? "Sistema en línea" : "Sin conexión";
   if (!ok) {
     els.robotState.dataset.state = "offline";
-    els.robotStateLabel.textContent = "Sin conexión con el servidor";
+    els.robotStateLabel.textContent = "Sin conexión";
   }
 }
 

@@ -65,6 +65,14 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def revalidar_siempre(request: Request, call_next):
+    # Without this, browsers keep serving a stale styles.css/app.js after the frontend changes.
+    response = await call_next(request)
+    response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 @app.exception_handler(inventory.InventarioCorrupto)
 def inventario_corrupto_handler(_: Request, exc: inventory.InventarioCorrupto) -> JSONResponse:
     logger.error("%s", exc)

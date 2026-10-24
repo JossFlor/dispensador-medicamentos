@@ -86,17 +86,40 @@
             <h2 id="robot-title">Estado del robot</h2>
           </header>
           <div class="robot-status">
-            <div class="robot-state" id="robot-state" data-state="offline" role="status" aria-live="polite">
-              <span class="robot-dot" aria-hidden="true"></span>
-              <span id="robot-state-label">Conectando…</span>
+            <div class="robot-hero" id="robot-state" data-state="offline" role="status" aria-live="polite">
+              <span class="robot-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <rect x="3.5" y="18" width="11" height="3" rx="1" fill="currentColor" />
+                  <path
+                    d="M9 18L7 11L15 7M15 7l4-2.5M15 7l4 2"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <circle cx="7" cy="11" r="2" fill="currentColor" />
+                  <circle cx="15" cy="7" r="1.8" fill="currentColor" />
+                </svg>
+              </span>
+              <span class="robot-hero-text">
+                <span class="robot-hero-label">Estado actual</span>
+                <span class="robot-hero-value" id="robot-state-label">Conectando…</span>
+              </span>
             </div>
             <dl class="robot-facts">
-              <dt>Modo</dt>
-              <dd id="robot-mode">—</dd>
-              <dt>Orden en curso</dt>
-              <dd id="robot-current">—</dd>
-              <dt>Última actividad</dt>
-              <dd id="robot-activity">—</dd>
+              <div class="robot-fact">
+                <dt>Modo</dt>
+                <dd id="robot-mode">—</dd>
+              </div>
+              <div class="robot-fact">
+                <dt>Orden en curso</dt>
+                <dd id="robot-current">—</dd>
+              </div>
+              <div class="robot-fact">
+                <dt>Última actividad</dt>
+                <dd id="robot-activity">—</dd>
+              </div>
             </dl>
           </div>
         </section>

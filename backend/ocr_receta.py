@@ -1,5 +1,7 @@
 import io
 import os
+import shutil
+import sys
 from dataclasses import dataclass
 
 from backend import medicamentos
@@ -8,6 +10,24 @@ from backend.schemas import ColorMedicamento, Medicamento
 OCR_LANG = os.environ.get("OCR_LANG", "spa")
 ANCHO_MINIMO = 1200
 ANCHO_MAXIMO = 2400
+_RUTAS_TESSERACT = ("/opt/homebrew/bin/tesseract", "/usr/local/bin/tesseract", "/usr/bin/tesseract")
+
+
+def _mensaje_instalacion() -> str:
+    if sys.platform == "darwin":
+        return "Tesseract no está instalado. En el Mac: brew install tesseract tesseract-lang"
+    return "Tesseract no está instalado. Linux: sudo apt install tesseract-ocr tesseract-ocr-spa"
+
+
+def _asegurar_binario() -> None:
+    import pytesseract
+
+    if shutil.which("tesseract"):
+        return
+    for ruta in _RUTAS_TESSERACT:
+        if os.path.isfile(ruta):
+            pytesseract.pytesseract.tesseract_cmd = ruta
+            return
 
 
 class OCRNoDisponible(RuntimeError):
@@ -44,12 +64,11 @@ def extraer_texto(datos: bytes) -> str:
         ancho = max(ANCHO_MINIMO, min(img.width, ANCHO_MAXIMO))
         img = img.resize((ancho, round(img.height * ancho / img.width)), Image.LANCZOS)
 
+    _asegurar_binario()
     try:
         return pytesseract.image_to_string(img, lang=OCR_LANG)
     except pytesseract.TesseractNotFoundError as e:
-        raise OCRNoDisponible(
-            "Tesseract no está instalado. Linux: sudo apt install tesseract-ocr tesseract-ocr-spa"
-        ) from e
+        raise OCRNoDisponible(_mensaje_instalacion()) from e
     except pytesseract.TesseractError as e:
         if OCR_LANG == "eng":
             raise OCRNoDisponible(f"Tesseract falló: {e}") from e
