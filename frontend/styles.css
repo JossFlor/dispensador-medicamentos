@@ -847,6 +847,318 @@ body {
   text-align: center;
 }
 
+.rx-chip {
+  align-self: center;
+}
+
+/* Voice and prescription assistant */
+
+.assist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.assist-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.btn-assist {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-assist:hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.btn-assist:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.btn-assist:disabled {
+  cursor: not-allowed;
+  color: var(--text-subtle);
+  background: var(--surface-alt);
+}
+
+.btn-assist svg {
+  flex-shrink: 0;
+}
+
+.btn-assist.is-listening,
+.btn-assist.is-listening:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: #fff;
+  background: var(--danger);
+  animation: listening 1.4s ease-in-out infinite;
+}
+
+@keyframes listening {
+  50% {
+    box-shadow: 0 0 0 5px rgba(180, 35, 24, 0.18);
+  }
+}
+
+.assist-status {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--info);
+  background: var(--info-soft);
+}
+
+.assist-status[data-tone="success"] {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.assist-status[data-tone="warning"] {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.assist-status[data-tone="error"] {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.rx {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+}
+
+.rx[data-state="ok"] {
+  border-color: #bfe3cf;
+  background: var(--success-soft);
+}
+
+.rx[data-state="rejected"],
+.rx[data-state="error"] {
+  border-color: #f3c3be;
+  background: var(--danger-soft);
+}
+
+.rx-preview {
+  flex-shrink: 0;
+  width: 64px;
+  height: 84px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--surface);
+}
+
+.rx-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.rx-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.rx-title {
+  font-weight: 600;
+}
+
+.rx-detail {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.rx-ocr {
+  margin: 0;
+  max-height: 4.5em;
+  overflow-y: auto;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.rx-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+.rx[data-state="ok"] #rx-validate,
+.rx[data-state="validating"] #rx-validate {
+  display: none;
+}
+
+.btn-link {
+  padding: 0.35rem 0.25rem;
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.btn-link:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.btn-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.topbar-link {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.topbar-link:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.topbar-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+/* Manager dashboard */
+
+.grid-gerente {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  grid-template-areas:
+    "inventory robot"
+    "recetas recetas";
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.panel-robot {
+  grid-area: robot;
+}
+
+.panel-recetas {
+  grid-area: recetas;
+}
+
+.robot-status {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.robot-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.robot-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+
+.robot-state[data-state="libre"] .robot-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgba(29, 122, 78, 0.18);
+}
+
+.robot-state[data-state="ocupado"] .robot-dot {
+  background: var(--primary);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.robot-state[data-state="offline"] .robot-dot {
+  background: var(--danger);
+}
+
+.robot-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  font-size: 13px;
+}
+
+.robot-facts dt {
+  color: var(--text-subtle);
+}
+
+.robot-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.recetas-wrap {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.recetas-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.recetas-table .col-fragmento {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.recetas-table .col-hora,
+.recetas-table .col-dispensada {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* Restock modal */
 
 .modal {
@@ -1185,6 +1497,14 @@ body {
       "log";
   }
 
+  .grid-gerente {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "robot"
+      "inventory"
+      "recetas";
+  }
+
   .panel-dispense {
     position: static;
   }
@@ -1204,8 +1524,13 @@ body {
   }
 
   .topbar-meta .meta-item,
+  .topbar-link,
   .brand-sub {
     display: none;
+  }
+
+  .assist-actions {
+    grid-template-columns: 1fr;
   }
 
   .brand-name {

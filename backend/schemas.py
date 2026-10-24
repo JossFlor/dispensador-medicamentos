@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -16,8 +17,21 @@ class Inventario(BaseModel):
     azul: int = Field(ge=0)
 
 
+class Medicamento(BaseModel):
+    color: ColorMedicamento
+    nombre: str
+    dosis: str
+    presentacion: str
+    bandeja: str
+    palabras_clave: list[str] = Field(description="Términos que identifican el medicamento en voz y en recetas")
+
+
 class SolicitudColor(BaseModel):
     color: ColorMedicamento
+    receta_id: str | None = Field(
+        default=None,
+        description="Receta validada por OCR que respalda la orden. Opcional: sin ella la orden se dispensa igual.",
+    )
 
 
 class SolicitudReposicion(BaseModel):
@@ -32,3 +46,44 @@ class RespuestaSolicitud(BaseModel):
     status: Literal["entregado"]
     color: ColorMedicamento
     inventario: Inventario
+    receta_id: str | None = None
+
+
+class Actividad(BaseModel):
+    evento: str
+    nivel: Literal["info", "success", "warning", "error"]
+    timestamp: datetime
+
+
+class EstadoSistema(BaseModel):
+    robot_ocupado: bool
+    dispensando: ColorMedicamento | None
+    modo_robot: Literal["lelab", "stub"]
+    inventario: Inventario
+    ultima_actividad: Actividad | None
+
+
+class SolicitudVoz(BaseModel):
+    texto: str = Field(min_length=1, max_length=500)
+
+
+class RespuestaVoz(BaseModel):
+    color: ColorMedicamento
+    nombre: str
+    confianza: float = Field(ge=0, le=1)
+    texto_recibido: str
+
+
+class ValidacionReceta(BaseModel):
+    id: str
+    timestamp: datetime
+    color: ColorMedicamento | None = Field(description="Medicamento autorizado o, si se rechazó, el solicitado")
+    medicamento: str | None
+    autorizado: bool
+    motivo: str
+    fragmento: str | None = Field(description="Línea de la receta donde se encontró el medicamento")
+    texto_ocr: str
+
+
+class RegistroReceta(ValidacionReceta):
+    dispensada_en: datetime | None = None

@@ -1,19 +1,26 @@
-// `color` must match the tray identifiers used by the API and the robot.
-const MEDICAMENTOS = [
-  { color: "rojo", nombre: "Paracetamol", dosis: "500 mg", presentacion: "Comprimidos", bandeja: "Bandeja A · Roja" },
-  { color: "amarillo", nombre: "Ibuprofeno", dosis: "400 mg", presentacion: "Comprimidos", bandeja: "Bandeja B · Amarilla" },
-  { color: "verde", nombre: "Amoxicilina", dosis: "500 mg", presentacion: "Cápsulas", bandeja: "Bandeja C · Verde" },
-  { color: "azul", nombre: "Omeprazol", dosis: "20 mg", presentacion: "Cápsulas", bandeja: "Bandeja D · Azul" },
-];
+import {
+  STOCK_REFERENCIA,
+  cargarCatalogo,
+  estadoStock,
+  filaInventarioHTML,
+  fmtDate,
+  fmtTime,
+  nombreCompleto,
+  pintarFilaInventario,
+  sleep,
+} from "./comun.js";
+
+// Loaded from GET /medicamentos; `color` identifies the tray for the API and the robot.
+let MEDICAMENTOS = [];
 
 const POLL_MS = 2000;
-const REQUEST_TIMEOUT_MS = 130_000;
-const STOCK_REFERENCIA = 1;
-const STOCK_BAJO = 1;
+const REQUEST_TIMEOUT_MS = 210_000;
 const MAX_STOCK = 20;
 const MAX_LOG = 50;
+const MAX_TEXTO_OCR_UI = 160;
 const PASOS = ["registrada", "dispensando", "entregada"];
 const NIVELES_LOG = { info: "Info", success: "Correcto", warning: "Aviso", error: "Error" };
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 const state = {
   inventario: {},
@@ -22,6 +29,11 @@ const state = {
   reponiendo: false,
   conectado: null,
   inventarioVersion: 0,
+  escuchando: false,
+  interpretandoVoz: false,
+  rxArchivo: null,
+  validandoReceta: false,
+  receta: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -52,37 +64,26 @@ const els = {
   clockTime: $("clock-time"),
   summaryUnits: $("summary-units"),
   summaryAlerts: $("summary-alerts"),
+  voiceBtn: $("voice-btn"),
+  voiceLabel: $("voice-label"),
+  rxBtn: $("rx-btn"),
+  rxInput: $("rx-input"),
+  assistStatus: $("assist-status"),
+  rxCard: $("rx-card"),
+  rxPreview: $("rx-preview"),
+  rxTitle: $("rx-title"),
+  rxBadge: $("rx-badge"),
+  rxDetail: $("rx-detail"),
+  rxOcr: $("rx-ocr"),
+  rxValidate: $("rx-validate"),
+  rxDiscard: $("rx-discard"),
+  rxChip: $("rx-chip"),
 };
 
-const fmtTime = (d) => d.toLocaleTimeString("es-ES", { hour12: false });
-const fmtDate = (d) => d.toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "short" });
-const nombreCompleto = (med) => `${med.nombre} ${med.dosis}`;
 const buscarMed = (color) => MEDICAMENTOS.find((m) => m.color === color);
 
-function estadoStock(n) {
-  if (n <= 0) return { clave: "agotado", texto: "Agotado" };
-  if (n <= STOCK_BAJO) return { clave: "bajo", texto: "Stock bajo" };
-  return { clave: "ok", texto: "Disponible" };
-}
-
 function buildUI() {
-  els.rows.innerHTML = MEDICAMENTOS.map(
-    (m) => `
-      <tr data-color="${m.color}">
-        <td class="col-med">
-          <div class="med-name">${m.nombre} <span class="med-dose">${m.dosis}</span></div>
-          <div class="med-meta">${m.presentacion}</div>
-        </td>
-        <td class="col-tray"><span class="tray"><span class="tray-dot" data-color="${m.color}"></span>${m.bandeja}</span></td>
-        <td class="col-stock">
-          <div class="stock">
-            <span class="stock-value">—</span>
-            <span class="stock-bar"><span class="stock-fill"></span></span>
-          </div>
-        </td>
-        <td class="col-status"><span class="badge">Cargando</span></td>
-      </tr>`
-  ).join("");
+  els.rows.innerHTML = MEDICAMENTOS.map(filaInventarioHTML).join("");
 
   els.options.insertAdjacentHTML(
     "beforeend",
@@ -104,15 +105,12 @@ function buildUI() {
   els.log.innerHTML = `<tr class="log-empty"><td colspan="3">Sin actividad registrada en esta sesión.</td></tr>`;
 
   els.rows.addEventListener("animationend", (e) => e.target.classList.remove("is-updated"));
-  els.options.addEventListener("change", (e) => {
-    state.seleccion = e.target.value;
-    if (!state.enCurso) els.progress.hidden = true;
-    render();
-  });
+  els.options.addEventListener("change", (e) => seleccionar(e.target.value));
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
     dispensar();
   });
+  buildAsistenteUI();
   buildRestockUI();
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) fetchInventario();
@@ -127,21 +125,13 @@ function render(prev = state.inventario) {
   for (const m of MEDICAMENTOS) {
     const n = state.inventario[m.color];
     const tieneDato = Number.isInteger(n);
-    const est = tieneDato ? estadoStock(n) : null;
-    if (tieneDato) {
+    const row = els.rows.querySelector(`tr[data-color="${m.color}"]`);
+    const est = pintarFilaInventario(row, n);
+    if (est) {
       conocido = true;
       unidades += n;
       if (est.clave !== "ok") alertas += 1;
     }
-
-    const row = els.rows.querySelector(`tr[data-color="${m.color}"]`);
-    const fill = row.querySelector(".stock-fill");
-    const badge = row.querySelector(".badge");
-    row.querySelector(".stock-value").textContent = tieneDato ? String(n) : "—";
-    fill.style.width = tieneDato ? `${Math.min(100, (n / STOCK_REFERENCIA) * 100)}%` : "0%";
-    fill.dataset.state = est?.clave ?? "";
-    badge.textContent = est?.texto ?? "Cargando";
-    badge.dataset.state = est?.clave ?? "";
     row.classList.toggle("is-active", state.enCurso && state.seleccion === m.color);
     if (tieneDato && Number.isInteger(prev[m.color]) && n < prev[m.color]) {
       row.classList.remove("is-updated");
@@ -176,6 +166,22 @@ function render(prev = state.inventario) {
       : med
         ? `Dispensar ${nombreCompleto(med)}`
         : "Seleccione un medicamento";
+  els.rxChip.hidden = !(med && state.receta?.color === med.color);
+
+  const ocupado = state.enCurso || state.reponiendo || !state.conectado;
+  els.voiceBtn.disabled = !SpeechRecognition || state.interpretandoVoz || (ocupado && !state.escuchando);
+  els.voiceBtn.classList.toggle("is-listening", state.escuchando);
+  els.voiceLabel.textContent = !SpeechRecognition
+    ? "Voz no disponible"
+    : state.escuchando
+      ? "Escuchando… pulse para terminar"
+      : state.interpretandoVoz
+        ? "Interpretando…"
+        : "Pedir por voz";
+  els.rxBtn.disabled = ocupado || state.validandoReceta;
+  els.rxValidate.disabled = ocupado || state.validandoReceta || !state.rxArchivo;
+  els.rxValidate.textContent = state.validandoReceta ? "Leyendo receta…" : "Validar con IA";
+  els.rxDiscard.disabled = state.validandoReceta;
 }
 
 function setInventario(nuevo) {
@@ -238,7 +244,7 @@ function detenerCronometro() {
 function mensajeError(res, data) {
   if (res.status === 502) return "El robot de dispensación reportó un fallo. Revise la bandeja.";
   if (res.status === 504) return "El robot no respondió a tiempo.";
-  const detail = data.detail ?? res.statusText;
+  const detail = data.detail || res.statusText || `HTTP ${res.status}`;
   return Array.isArray(detail) ? detail.map((d) => d.msg).join(", ") : String(detail);
 }
 
@@ -256,17 +262,24 @@ async function fetchInventario() {
   }
 }
 
+function seleccionar(color) {
+  state.seleccion = color;
+  if (!state.enCurso) els.progress.hidden = true;
+  render();
+}
+
 async function dispensar() {
   const med = buscarMed(state.seleccion);
   if (!med || state.enCurso) return;
   const nombre = nombreCompleto(med);
+  const recetaId = state.receta?.color === med.color ? state.receta.id : null;
 
   state.enCurso = true;
   render();
   els.progressTitle.textContent = nombre;
   setProgreso("dispensando", "active", `${med.bandeja}: el robot está preparando la entrega…`);
   iniciarCronometro();
-  addLog(`Orden de dispensación: ${nombre} (${med.bandeja})`);
+  addLog(`Orden de dispensación: ${nombre} (${med.bandeja})${recetaId ? " con receta validada" : ""}`);
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -275,7 +288,7 @@ async function dispensar() {
     const res = await fetch("/solicitar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ color: med.color }),
+      body: JSON.stringify({ color: med.color, receta_id: recetaId }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => ({}));
@@ -284,6 +297,7 @@ async function dispensar() {
     state.inventarioVersion += 1;
     state.enCurso = false;
     state.seleccion = null;
+    if (recetaId) descartarReceta();
     setInventario(data.inventario ?? state.inventario);
     setProgreso("entregada", "done", `Entregado a las ${fmtTime(new Date())}. Retire el medicamento de la bandeja.`);
     addLog(`Dispensación completada: ${nombre}`, "success");
@@ -302,6 +316,194 @@ async function dispensar() {
     state.enCurso = false;
     render();
     fetchInventario();
+  }
+}
+
+function setAsistente(tono, texto) {
+  els.assistStatus.hidden = !texto;
+  els.assistStatus.dataset.tone = tono;
+  els.assistStatus.textContent = texto ?? "";
+}
+
+/** Selects a medication suggested by voice or a prescription, unless its tray is empty. */
+function sugerir(color, origen) {
+  const med = buscarMed(color);
+  if (!med) return false;
+  if (!(state.inventario[color] > 0)) {
+    setAsistente("warning", `${origen}: ${nombreCompleto(med)}, pero está agotado. Avise al personal.`);
+    return false;
+  }
+  if (!state.enCurso) seleccionar(color);
+  return true;
+}
+
+function buildAsistenteUI() {
+  if (!SpeechRecognition) {
+    els.voiceBtn.title = "El navegador no admite reconocimiento de voz. Use Google Chrome o Edge.";
+  }
+  els.voiceBtn.addEventListener("click", alternarVoz);
+  els.rxBtn.addEventListener("click", () => els.rxInput.click());
+  els.rxInput.addEventListener("change", () => {
+    const archivo = els.rxInput.files?.[0];
+    els.rxInput.value = "";
+    if (archivo) capturarReceta(archivo);
+  });
+  els.rxValidate.addEventListener("click", validarReceta);
+  els.rxDiscard.addEventListener("click", () => {
+    descartarReceta();
+    render();
+  });
+}
+
+const ERRORES_VOZ = {
+  "not-allowed": "Permiso de micrófono denegado. Actívelo en el navegador.",
+  "service-not-allowed": "Permiso de micrófono denegado. Actívelo en el navegador.",
+  "no-speech": "No se detectó voz. Pulse de nuevo y diga el medicamento.",
+  "audio-capture": "No se encontró ningún micrófono.",
+  network: "El reconocimiento de voz necesita internet (Google Chrome o Edge).",
+};
+
+let reconocimiento = null;
+
+function alternarVoz() {
+  if (state.escuchando) {
+    reconocimiento?.stop();
+    return;
+  }
+  if (!SpeechRecognition || state.enCurso) return;
+
+  reconocimiento = new SpeechRecognition();
+  reconocimiento.lang = "es-ES";
+  reconocimiento.interimResults = true;
+  reconocimiento.continuous = false;
+  reconocimiento.maxAlternatives = 1;
+
+  let textoFinal = "";
+  let error = null;
+  reconocimiento.onresult = (e) => {
+    const texto = Array.from(e.results, (r) => r[0].transcript).join(" ").trim();
+    if (e.results[e.results.length - 1].isFinal) textoFinal = texto;
+    setAsistente("info", `«${texto}»`);
+  };
+  reconocimiento.onerror = (e) => {
+    if (e.error !== "aborted") error = ERRORES_VOZ[e.error] ?? `Error de reconocimiento de voz (${e.error}).`;
+  };
+  reconocimiento.onend = () => {
+    state.escuchando = false;
+    render();
+    if (error) setAsistente("error", error);
+    else if (textoFinal) interpretarVoz(textoFinal);
+    else setAsistente("warning", ERRORES_VOZ["no-speech"]);
+  };
+
+  try {
+    reconocimiento.start();
+  } catch {
+    return;
+  }
+  state.escuchando = true;
+  setAsistente("info", "Escuchando… diga el medicamento, por ejemplo «Paracetamol».");
+  render();
+}
+
+async function interpretarVoz(texto) {
+  state.interpretandoVoz = true;
+  render();
+  try {
+    const res = await fetch("/interpretar-voz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texto }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(mensajeError(res, data));
+
+    const med = buscarMed(data.color);
+    if (sugerir(data.color, "Reconocido por voz")) {
+      setAsistente("success", `Reconocido por voz: ${nombreCompleto(med)} («${texto}»). Confirme con el botón Dispensar.`);
+      addLog(`Pedido por voz: ${nombreCompleto(med)} («${texto}»)`);
+    }
+  } catch (err) {
+    const msg = err instanceof TypeError ? "No se pudo contactar con el servidor." : err.message;
+    setAsistente("warning", `«${texto}»: ${msg}`);
+  } finally {
+    state.interpretandoVoz = false;
+    render();
+  }
+}
+
+function pintarReceta(estado, titulo, detalle, { badge = null, ocr = null } = {}) {
+  els.rxCard.hidden = false;
+  els.rxCard.dataset.state = estado;
+  els.rxTitle.textContent = titulo;
+  els.rxDetail.textContent = detalle;
+  els.rxBadge.hidden = !badge;
+  els.rxBadge.dataset.state = badge?.estado ?? "";
+  els.rxBadge.textContent = badge?.texto ?? "";
+  els.rxOcr.hidden = !ocr;
+  els.rxOcr.textContent = ocr ? `Texto leído: ${ocr}` : "";
+}
+
+function capturarReceta(archivo) {
+  descartarReceta();
+  state.rxArchivo = archivo;
+  els.rxPreview.src = URL.createObjectURL(archivo);
+  const med = buscarMed(state.seleccion);
+  pintarReceta(
+    "pending",
+    "Receta capturada",
+    med
+      ? `Se comprobará que la receta incluya ${nombreCompleto(med)}.`
+      : "Se detectará qué medicamento indica la receta."
+  );
+  render();
+}
+
+function descartarReceta() {
+  if (els.rxPreview.src) URL.revokeObjectURL(els.rxPreview.src);
+  els.rxPreview.removeAttribute("src");
+  els.rxCard.hidden = true;
+  state.rxArchivo = null;
+  state.receta = null;
+}
+
+async function validarReceta() {
+  if (!state.rxArchivo || state.validandoReceta) return;
+  const pedido = buscarMed(state.seleccion);
+  const form = new FormData();
+  form.append("imagen", state.rxArchivo);
+  if (pedido) form.append("color", pedido.color);
+
+  state.validandoReceta = true;
+  state.receta = null;
+  pintarReceta("validating", "Validando receta…", "La IA está leyendo la receta.");
+  render();
+  try {
+    const res = await fetch("/validar-receta", { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(mensajeError(res, data));
+
+    if (data.autorizado) {
+      state.receta = { id: data.id, color: data.color, medicamento: data.medicamento };
+      const detalle = data.fragmento ? `${data.motivo} Detectado: «${data.fragmento}».` : data.motivo;
+      pintarReceta("ok", "Receta validada por IA", detalle, { badge: { estado: "success", texto: "Autorizada" } });
+      addLog(`Receta validada por IA: ${data.medicamento}`, "success");
+      sugerir(data.color, "La receta indica");
+    } else {
+      const ocr = data.texto_ocr ? data.texto_ocr.slice(0, MAX_TEXTO_OCR_UI) : null;
+      pintarReceta("rejected", "Receta no válida", data.motivo, {
+        badge: { estado: "error", texto: "Rechazada" },
+        ocr,
+      });
+      addLog(`Receta rechazada por IA: ${data.motivo}`, "warning");
+    }
+  } catch (err) {
+    const msg = err instanceof TypeError ? "No se pudo contactar con el servidor." : err.message;
+    pintarReceta("error", "No se pudo validar la receta", msg);
+    addLog(`Validación de receta fallida. ${msg}`, "error");
+  } finally {
+    state.validandoReceta = false;
+    render();
   }
 }
 
@@ -509,11 +711,25 @@ function tickReloj() {
   els.clockTime.textContent = fmtTime(now);
 }
 
-buildUI();
-render();
-tickReloj();
-setInterval(tickReloj, 1000);
-fetchInventario();
-setInterval(() => {
-  if (!document.hidden) fetchInventario();
-}, POLL_MS);
+async function iniciar() {
+  tickReloj();
+  setInterval(tickReloj, 1000);
+  render();
+  for (;;) {
+    try {
+      MEDICAMENTOS = await cargarCatalogo();
+      break;
+    } catch (err) {
+      setConexion(false, err instanceof TypeError ? "servidor no disponible" : err.message);
+      await sleep(POLL_MS);
+    }
+  }
+  buildUI();
+  render();
+  fetchInventario();
+  setInterval(() => {
+    if (!document.hidden) fetchInventario();
+  }, POLL_MS);
+}
+
+iniciar();

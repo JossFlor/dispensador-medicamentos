@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import inventory, main
+from backend import inventory, main, ocr_receta, recetas_log
 from backend.inference_runner import InferenceError, InferenceTimeout, run_inference
 from backend.inventory import DEFAULT_STOCK
 from backend.schemas import COLORES
@@ -31,9 +31,29 @@ def robot(monkeypatch):
 
 
 @pytest.fixture
-def client(inv_path):
+def recetas_path(tmp_path, monkeypatch):
+    path = tmp_path / "recetas.jsonl"
+    monkeypatch.setattr(recetas_log, "RECETAS_PATH", path)
+    return path
+
+
+@pytest.fixture
+def client(inv_path, recetas_path):
     with TestClient(main.app) as c:
         yield c
+
+
+@pytest.fixture
+def ocr(monkeypatch):
+    """Replaces Tesseract with a fixed text so tests do not depend on the OCR binary."""
+    texto = {"valor": ""}
+    monkeypatch.setattr(ocr_receta, "extraer_texto", lambda datos: texto["valor"])
+    return texto
+
+
+def validar(client, color=None):
+    data = {"color": color} if color else {}
+    return client.post("/validar-receta", files={"imagen": ("receta.png", b"png", "image/png")}, data=data)
 
 
 def write_inv(path, **stock):
@@ -61,6 +81,7 @@ def test_solicitar_descuenta_y_persiste(client, inv_path, robot):
         "status": "entregado",
         "color": "azul",
         "inventario": {**{color: DEFAULT_STOCK for color in COLORES}, "azul": 2},
+        "receta_id": None,
     }
     assert read_inv(inv_path)["azul"] == 2
     assert robot == ["azul"]
@@ -228,3 +249,160 @@ def test_frontend_servido(client):
 
 def test_script_de_inferencia_real():
     assert run_inference("azul") == "Entregando cubo azul"
+
+
+def test_catalogo_cubre_todas_las_bandejas(client):
+    res = client.get("/medicamentos")
+    assert res.status_code == 200
+    assert [m["color"] for m in res.json()] == list(COLORES)
+
+
+def test_estado_refleja_robot_ocupado(client, inv_path):
+    write_inv(inv_path)
+    assert client.get("/estado").json()["robot_ocupado"] is False
+    main._dispensador_lock.acquire()
+    try:
+        estado = client.get("/estado").json()
+    finally:
+        main._dispensador_lock.release()
+    assert estado["robot_ocupado"] is True
+    assert estado["inventario"] == {color: DEFAULT_STOCK for color in COLORES}
+    assert estado["modo_robot"] in ("lelab", "stub")
+
+
+def test_estado_registra_ultima_entrega(client, inv_path, robot):
+    write_inv(inv_path, azul=2)
+    client.post("/solicitar", json={"color": "azul"})
+    actividad = client.get("/estado").json()["ultima_actividad"]
+    assert actividad["nivel"] == "success"
+    assert "Omeprazol" in actividad["evento"]
+
+
+@pytest.mark.parametrize(
+    ("texto", "color"),
+    [
+        ("Quiero paracetamol, por favor", "rojo"),
+        ("me da un IBUPROFENO", "amarillo"),
+        ("omeprasol", "azul"),
+        ("amoxicilína de quinientos", "verde"),
+        ("el azul", "azul"),
+    ],
+)
+def test_interpretar_voz(client, texto, color):
+    res = client.post("/interpretar-voz", json={"texto": texto})
+    assert res.status_code == 200
+    assert res.json()["color"] == color
+    assert res.json()["texto_recibido"] == texto
+
+
+@pytest.mark.parametrize("texto", ["buenos días", "paracetamol e ibuprofeno"])
+def test_interpretar_voz_sin_un_medicamento_claro(client, texto):
+    res = client.post("/interpretar-voz", json={"texto": texto})
+    assert res.status_code == 422
+
+
+def test_receta_autorizada_se_registra(client, ocr):
+    ocr["valor"] = "Dr. Pérez\nParacetamol 500 mg cada 8 horas\nFirma"
+    res = validar(client, "rojo")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["autorizado"] is True
+    assert body["color"] == "rojo"
+    assert body["fragmento"] == "Paracetamol 500 mg cada 8 horas"
+
+    historial = client.get("/recetas").json()
+    assert [r["id"] for r in historial] == [body["id"]]
+    assert historial[0]["dispensada_en"] is None
+
+
+def test_receta_con_otro_medicamento_se_rechaza(client, ocr):
+    ocr["valor"] = "Ibuprofeno 400 mg"
+    body = validar(client, "rojo").json()
+    assert body["autorizado"] is False
+    assert "Ibuprofeno" in body["motivo"]
+
+
+def test_receta_sin_color_detecta_el_medicamento(client, ocr):
+    ocr["valor"] = "RP/ Omeprazol 20mg en ayunas"
+    body = validar(client).json()
+    assert body["autorizado"] is True
+    assert body["color"] == "azul"
+
+
+def test_receta_ilegible_se_rechaza(client, ocr):
+    ocr["valor"] = "   "
+    assert validar(client, "verde").json()["autorizado"] is False
+
+
+def test_receta_sin_ocr_instalado_devuelve_503(client, monkeypatch):
+    def sin_tesseract(datos):
+        raise ocr_receta.OCRNoDisponible("Tesseract no está instalado")
+
+    monkeypatch.setattr(ocr_receta, "extraer_texto", sin_tesseract)
+    assert validar(client, "rojo").status_code == 503
+
+
+def test_imagen_invalida_devuelve_422(client):
+    assert validar(client, "rojo").status_code == 422
+
+
+def test_recetas_mas_recientes_primero(client, ocr):
+    ocr["valor"] = "Paracetamol"
+    primera = validar(client, "rojo").json()["id"]
+    ocr["valor"] = "nada"
+    segunda = validar(client, "rojo").json()["id"]
+    assert [r["id"] for r in client.get("/recetas").json()] == [segunda, primera]
+
+
+def test_solicitar_con_receta_la_marca_como_dispensada(client, inv_path, robot, ocr):
+    write_inv(inv_path, rojo=2)
+    ocr["valor"] = "Paracetamol 500 mg"
+    receta_id = validar(client, "rojo").json()["id"]
+
+    res = client.post("/solicitar", json={"color": "rojo", "receta_id": receta_id})
+    assert res.status_code == 200
+    assert res.json()["receta_id"] == receta_id
+    assert client.get("/recetas").json()[0]["dispensada_en"] is not None
+
+    reutilizada = client.post("/solicitar", json={"color": "rojo", "receta_id": receta_id})
+    assert reutilizada.status_code == 409
+    assert robot == ["rojo"]
+
+
+@pytest.mark.parametrize(
+    ("texto_receta", "color_pedido"),
+    [("Ibuprofeno", "rojo"), ("Paracetamol", "amarillo")],
+)
+def test_solicitar_con_receta_no_valida_no_mueve_el_robot(
+    client, inv_path, robot, ocr, texto_receta, color_pedido
+):
+    write_inv(inv_path)
+    ocr["valor"] = texto_receta
+    receta_id = validar(client, "rojo").json()["id"]
+    res = client.post("/solicitar", json={"color": color_pedido, "receta_id": receta_id})
+    assert res.status_code == 409
+    assert robot == []
+    assert read_inv(inv_path) == {color: DEFAULT_STOCK for color in COLORES}
+
+
+def test_solicitar_con_receta_inexistente(client, inv_path, robot):
+    write_inv(inv_path)
+    res = client.post("/solicitar", json={"color": "rojo", "receta_id": "no-existe"})
+    assert res.status_code == 409
+    assert robot == []
+
+
+def test_receta_caducada(client, inv_path, robot, ocr, monkeypatch):
+    write_inv(inv_path)
+    ocr["valor"] = "Paracetamol"
+    receta_id = validar(client, "rojo").json()["id"]
+    monkeypatch.setattr(recetas_log, "VIGENCIA", recetas_log.VIGENCIA * 0)
+    res = client.post("/solicitar", json={"color": "rojo", "receta_id": receta_id})
+    assert res.status_code == 409
+    assert "caducó" in res.json()["detail"]
+
+
+def test_gerente_servido(client):
+    res = client.get("/gerente.html")
+    assert res.status_code == 200
+    assert "Panel de gerencia" in res.text

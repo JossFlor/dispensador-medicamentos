@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panel de gerencia · Farmacias Similares</title>
+    <link rel="icon" href="/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">
+          <img src="/logo-simi.png" alt="" width="40" height="40" decoding="async" />
+        </span>
+        <div class="brand-text">
+          <span class="brand-name">Farmacias Similares</span>
+          <span class="brand-sub">Panel de gerencia</span>
+        </div>
+      </div>
+
+      <div class="topbar-meta">
+        <div class="meta-item">
+          <span class="meta-label">Sucursal</span>
+          <span class="meta-value">Central</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label" id="clock-date">—</span>
+          <span class="meta-value tabular" id="clock-time">—</span>
+        </div>
+        <a class="topbar-link" href="/">Kiosko de dispensación</a>
+        <div class="connection" id="connection" data-state="connecting" role="status">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connection-label">Conectando…</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <div>
+          <h1>Panel de gerencia</h1>
+          <p class="page-lead">
+            Inventario en tiempo real, estado del robot dispensador e historial de recetas validadas por la IA.
+          </p>
+        </div>
+        <dl class="summary">
+          <div class="summary-item">
+            <dt>Unidades</dt>
+            <dd class="tabular" id="summary-units">—</dd>
+          </div>
+          <div class="summary-item">
+            <dt>Autorizadas</dt>
+            <dd class="tabular" id="summary-rx-ok">—</dd>
+          </div>
+          <div class="summary-item">
+            <dt>Rechazadas</dt>
+            <dd class="tabular" id="summary-rx-rejected">—</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="grid-gerente">
+        <section class="panel panel-inventory" aria-labelledby="inv-title">
+          <header class="panel-head">
+            <h2 id="inv-title">Inventario</h2>
+            <span class="panel-hint" id="last-sync">Sin sincronizar</span>
+          </header>
+          <div class="table-wrap">
+            <table class="table inv-table">
+              <thead>
+                <tr>
+                  <th scope="col">Medicamento</th>
+                  <th scope="col">Ubicación</th>
+                  <th scope="col">Existencias</th>
+                  <th scope="col">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-rows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-robot" aria-labelledby="robot-title">
+          <header class="panel-head">
+            <h2 id="robot-title">Estado del robot</h2>
+          </header>
+          <div class="robot-status">
+            <div class="robot-state" id="robot-state" data-state="offline" role="status" aria-live="polite">
+              <span class="robot-dot" aria-hidden="true"></span>
+              <span id="robot-state-label">Conectando…</span>
+            </div>
+            <dl class="robot-facts">
+              <dt>Modo</dt>
+              <dd id="robot-mode">—</dd>
+              <dt>Orden en curso</dt>
+              <dd id="robot-current">—</dd>
+              <dt>Última actividad</dt>
+              <dd id="robot-activity">—</dd>
+            </dl>
+          </div>
+        </section>
+
+        <section class="panel panel-recetas" aria-labelledby="rx-title">
+          <header class="panel-head">
+            <h2 id="rx-title">Recetas validadas por IA</h2>
+            <span class="panel-hint">Últimas 50 · histórico persistente</span>
+          </header>
+          <div class="table-wrap recetas-wrap">
+            <table class="table recetas-table">
+              <thead>
+                <tr>
+                  <th scope="col">Hora</th>
+                  <th scope="col">Medicamento</th>
+                  <th scope="col">Resultado</th>
+                  <th scope="col">Detalle</th>
+                  <th scope="col">Dispensada</th>
+                </tr>
+              </thead>
+              <tbody id="recetas-rows">
+                <tr class="log-empty"><td colspan="5">Cargando historial…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>Uso exclusivo de gerencia</span>
+      <span>Farmacias Similares · Sistema de Dispensación Automatizada · v1.1</span>
+    </footer>
+
+    <script src="/gerente.js" type="module"></script>
+  </body>
+</html>

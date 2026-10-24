@@ -21,13 +21,15 @@ class InferenceTimeout(InferenceError):
     pass
 
 
+def usa_lelab() -> bool:
+    return os.environ.get("USE_LELAB", "").strip().lower() in ("1", "true", "yes")
+
+
 def _inference_timeout() -> int:
     raw = os.environ.get("INFERENCE_TIMEOUT")
     if raw:
         return int(raw)
-    if os.environ.get("USE_LELAB", "").strip().lower() in ("1", "true", "yes"):
-        return LELAB_TIMEOUT_S
-    return DEFAULT_TIMEOUT_S
+    return LELAB_TIMEOUT_S if usa_lelab() else DEFAULT_TIMEOUT_S
 
 
 def run_inference(color: ColorMedicamento, timeout: int | None = None) -> str:
@@ -38,7 +40,7 @@ def run_inference(color: ColorMedicamento, timeout: int | None = None) -> str:
         timeout = _inference_timeout()
 
     cmd = [sys.executable, str(INFERENCE_SCRIPT), "--color", color]
-    if os.environ.get("USE_LELAB", "").strip().lower() in ("1", "true", "yes"):
+    if usa_lelab():
         cmd.append("--lelab")
 
     try:
