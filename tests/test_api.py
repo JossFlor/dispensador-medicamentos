@@ -415,7 +415,7 @@ def test_gerente_servido(client):
     assert res.status_code == 200
     assert "Panel de gerencia" in res.text
     assert "Freno" in res.text
-    assert "Cubo colocado" in res.text
+    assert "Cubo colocado" not in res.text
 
 
 def test_freno_y_cubo_avisan_a_la_orden_en_curso(client, tmp_path, monkeypatch):
