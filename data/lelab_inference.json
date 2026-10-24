@@ -1,0 +1,31 @@
+{
+  "follower_port": "/dev/ttyACM1",
+  "follower_config": "so-arm101.json",
+  "policy_ref": "InakiAM/cubo_v1@root",
+  "task": "",
+  "duration_s": 60,
+  "cameras": {
+    "Robot": {
+      "type": "opencv",
+      "camera_index": 4,
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "rotation": 0
+    },
+    "Webcam": {
+      "type": "opencv",
+      "camera_index": 2,
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "rotation": 0
+    }
+  },
+  "tasks_by_color": {
+    "rojo": "",
+    "amarillo": "",
+    "verde": "",
+    "azul": ""
+  }
+}

@@ -8,7 +8,7 @@ const MEDICAMENTOS = [
 
 const POLL_MS = 2000;
 const REQUEST_TIMEOUT_MS = 130_000;
-const STOCK_REFERENCIA = 3;
+const STOCK_REFERENCIA = 1;
 const STOCK_BAJO = 1;
 const MAX_STOCK = 20;
 const MAX_LOG = 50;

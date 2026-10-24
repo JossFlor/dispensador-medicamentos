@@ -10,7 +10,7 @@ from backend.schemas import COLORES, ColorMedicamento, Inventario
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 INVENTARIO_PATH = PROJECT_ROOT / "data" / "inventario.json"
-DEFAULT_STOCK = 3
+DEFAULT_STOCK = 1
 
 _lock = threading.Lock()
 

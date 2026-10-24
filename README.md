@@ -20,16 +20,27 @@ pip install -r requirements.txt
 
 ## Arranque (un solo puerto: API + web)
 
-Desde la raíz del proyecto:
+LeLab usa el puerto **8000** por defecto. Con robot real, arranca primero LeLab y la farmacia en **otro puerto**:
+
+```bash
+# Terminal 1 — robot + modelo (LeLab)
+lelab
+
+# Terminal 2 — panel de farmacia
+export USE_LELAB=1
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080
+```
+
+Sin LeLab (stub de 2–4 s):
 
 ```bash
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-- **Interfaz:** http://localhost:8000/
-- **Documentación de la API (Swagger):** http://localhost:8000/docs
+- **Interfaz:** http://localhost:8080/ (con LeLab) o http://localhost:8000/ (solo stub)
+- **Documentación de la API (Swagger):** mismo host, ruta `/docs`
 
-En la red local del hackathon, usa la IP de tu máquina: `http://<tu-ip>:8000`
+En la red local del hackathon, usa la IP de tu máquina: `http://<tu-ip>:8080`
 
 ## Interfaz
 
@@ -55,7 +66,7 @@ Los medicamentos asociados a cada bandeja se configuran en la lista `MEDICAMENTO
 |--------|------|-------------|
 | `GET` | `/inventario` | Stock actual (`rojo`, `amarillo`, `verde`, `azul`) |
 | `POST` | `/solicitar` | Body: `{"color": "rojo"}`. Ejecuta el robot y descuenta 1 unidad si la entrega tiene éxito |
-| `POST` | `/reponer` | Body: `{"stock": {"rojo": 3, "azul": 5}}`. Fija las unidades (0–20) de las bandejas indicadas; las demás no cambian. Sin body, devuelve todas al stock inicial (3). Responde `409` si hay una dispensación en curso |
+| `POST` | `/reponer` | Body: `{"stock": {"rojo": 1, "azul": 5}}`. Fija las unidades (0–20) de las bandejas indicadas; las demás no cambian. Sin body, devuelve todas al stock inicial (1). Responde `409` si hay una dispensación en curso |
 
 Respuestas de `POST /solicitar`:
 
@@ -72,18 +83,39 @@ Garantías del backend:
 
 - **Una orden a la vez:** solo hay un robot físico, así que mientras se dispensa cualquier otra orden recibe `409` al instante, en lugar de mover el robot dos veces en paralelo.
 - **El stock solo baja si la entrega tiene éxito.**
-- **Persistencia segura:** el inventario se guarda en [`data/inventario.json`](data/inventario.json) con escritura atómica, de modo que un corte a mitad de escritura no deja el archivo dañado. Si se borra el archivo, se recrea con 3 unidades por bandeja; si está dañado, `POST /reponer` lo restablece.
+- **Persistencia segura:** el inventario se guarda en [`data/inventario.json`](data/inventario.json) con escritura atómica, de modo que un corte a mitad de escritura no deja el archivo dañado. Si se borra el archivo, se recrea con 1 unidad por bandeja; si está dañado, `POST /reponer` lo restablece.
 
-## Stub de inferencia
+## Inferencia: stub o LeLab
+
+**Stub** (sin hardware):
 
 ```bash
 python scripts/inference.py --color azul
 python scripts/inference.py --color rojo --fail   # simula fallo (stock no baja vía API)
 ```
 
-Para integrar el robot real, edita [`scripts/inference.py`](scripts/inference.py) manteniendo el argumento `--color` y el contrato: código de salida `0` si la entrega tuvo éxito y distinto de `0` (con el motivo en stderr) si falló.
+**LeLab** (mismo cuerpo que el botón *Start Inference* en LeLab):
 
-> El backend lanza un proceso nuevo por cada orden. Con el stub no importa, pero si el robot real carga un modelo pesado (Hugging Face / LeRobot), cárgalo una sola vez en un proceso persistente en lugar de en cada llamada, o cada dispensación pagará el tiempo de carga del modelo.
+1. Copia [`data/lelab_inference.json.example`](data/lelab_inference.json.example) a `data/lelab_inference.json` y ajusta puerto USB / índices de cámara si cambian.
+2. Con `lelab` en marcha en `http://127.0.0.1:8000`:
+
+```bash
+export USE_LELAB=1
+python scripts/inference.py --lelab --color azul
+```
+
+Variables útiles:
+
+| Variable | Valor por defecto | Uso |
+|----------|-------------------|-----|
+| `USE_LELAB` | (vacío → stub) | `1` para disparar `POST /start-inference` en LeLab |
+| `LELAB_URL` | `http://127.0.0.1:8000` | URL del backend LeLab |
+| `LELAB_CONFIG` | `data/lelab_inference.json` | Payload de inferencia |
+| `INFERENCE_TIMEOUT` | `200` con LeLab, `120` sin | Segundos máximos por orden en el backend |
+
+El campo `tasks_by_color` en el JSON permite un `task` distinto por bandeja si el modelo es language-conditioned; con ACT suele dejarse `""`.
+
+> Cada orden lanza de nuevo el rollout en LeLab (hasta `duration_s`, p. ej. 60 s). Cierra vistas de cámara en LeLab antes de dispensar desde la web.
 
 ## Tests
 
@@ -96,7 +128,7 @@ Cubren la dispensación correcta y su persistencia, color inválido, falta de st
 
 ## Guion de demo (presentación)
 
-1. Abrir http://localhost:8000. El indicador muestra *Sistema en línea* y el registro, *Sistema iniciado*.
+1. Abrir la farmacia (http://localhost:8080 con LeLab + robot, o http://localhost:8000 solo con stub). El indicador muestra *Sistema en línea* y el registro, *Sistema iniciado*.
 2. Señalar el inventario: cuatro medicamentos con existencias y estado, sincronizados cada 2 s.
 3. Seleccionar **Omeprazol 20 mg** y pulsar **Dispensar Omeprazol 20 mg**. Mientras el robot trabaja se ven los pasos *Orden registrada → Dispensando → Entregado* con cronómetro; al terminar, la fila del inventario se resalta y las existencias bajan.
 4. Opcional: dispensar hasta dejar una bandeja en *Stock bajo* o *Agotado* para enseñar las alertas, y reponerla desde **Reponer stock**.
