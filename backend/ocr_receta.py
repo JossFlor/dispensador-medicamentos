@@ -44,6 +44,7 @@ class Evaluacion:
     medicamento: Medicamento | None
     motivo: str
     fragmento: str | None
+    detectados: list[Medicamento]
 
 
 def extraer_texto(datos: bytes) -> str:
@@ -90,7 +91,7 @@ def evaluar(texto: str, color: ColorMedicamento | None) -> Evaluacion:
     if not texto.strip():
         pedido = medicamentos.por_color(color) if color else None
         return Evaluacion(
-            False, pedido, "No se pudo leer texto en la imagen. Acerque la receta y use buena luz.", None
+            False, pedido, "No se pudo leer texto en la imagen. Acerque la receta y use buena luz.", None, []
         )
 
     encontrados = [med for med, _ in medicamentos.detectar(texto)]
@@ -98,18 +99,16 @@ def evaluar(texto: str, color: ColorMedicamento | None) -> Evaluacion:
     if color:
         pedido = medicamentos.por_color(color)
         if pedido in encontrados:
-            return Evaluacion(True, pedido, f"La receta incluye {pedido.nombre}.", _fragmento(texto, pedido))
+            return Evaluacion(True, pedido, f"La receta incluye {pedido.nombre}.", _fragmento(texto, pedido), encontrados)
         if encontrados:
             otros = ", ".join(med.nombre for med in encontrados)
-            return Evaluacion(False, pedido, f"La receta indica {otros}, no {pedido.nombre}.", None)
-        return Evaluacion(False, pedido, f"No se encontró {pedido.nombre} en la receta.", None)
+            return Evaluacion(False, pedido, f"La receta indica {otros}, no {pedido.nombre}.", None, encontrados)
+        return Evaluacion(False, pedido, f"No se encontró {pedido.nombre} en la receta.", None, [])
 
     if not encontrados:
-        return Evaluacion(False, None, "No se reconoció ningún medicamento del catálogo en la receta.", None)
+        return Evaluacion(False, None, "No se reconoció ningún medicamento del catálogo en la receta.", None, [])
     if len(encontrados) > 1:
         nombres = " y ".join(med.nombre for med in encontrados)
-        return Evaluacion(
-            False, None, f"La receta incluye {nombres}. Seleccione cuál dispensar y vuelva a validar.", None
-        )
+        return Evaluacion(False, None, f"La receta incluye {nombres}.", None, encontrados)
     med = encontrados[0]
-    return Evaluacion(True, med, f"La receta incluye {med.nombre}.", _fragmento(texto, med))
+    return Evaluacion(True, med, f"La receta incluye {med.nombre}.", _fragmento(texto, med), encontrados)

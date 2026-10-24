@@ -78,7 +78,7 @@ def test_solicitar_descuenta_y_persiste(client, inv_path, robot):
     res = client.post("/solicitar", json={"color": "azul"})
     assert res.status_code == 200
     assert res.json() == {
-        "status": "entregado",
+        "status": "completado",
         "color": "azul",
         "inventario": {**{color: DEFAULT_STOCK for color in COLORES}, "azul": 2},
         "receta_id": None,
@@ -320,6 +320,14 @@ def test_receta_con_otro_medicamento_se_rechaza(client, ocr):
     body = validar(client, "rojo").json()
     assert body["autorizado"] is False
     assert "Ibuprofeno" in body["motivo"]
+
+
+def test_receta_con_varios_medicamentos_devuelve_la_lista(client, ocr):
+    ocr["valor"] = "Paracetamol 500 mg\nIbuprofeno 400 mg"
+    body = validar(client).json()
+    assert body["autorizado"] is False
+    assert [m["color"] for m in body["detectados"]] == ["rojo", "amarillo"]
+    assert body["detectados"][0]["fragmento"] == "Paracetamol 500 mg"
 
 
 def test_receta_sin_color_detecta_el_medicamento(client, ocr):

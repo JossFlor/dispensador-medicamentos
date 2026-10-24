@@ -202,6 +202,31 @@
       </div>
     </main>
 
+    <dialog class="modal" id="queue-dialog" aria-labelledby="queue-title">
+      <form class="modal-form" id="queue-form">
+        <header class="modal-head">
+          <div>
+            <h2 id="queue-title">Medicamentos en la receta</h2>
+            <p class="modal-lead">
+              Marque los que hay que entregar. Se dispensan de uno en uno: el siguiente cubo no se pide hasta que el robot confirme el anterior.
+            </p>
+          </div>
+          <button type="button" class="modal-close" data-close aria-label="Cerrar">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+        <ul class="restock-list" id="queue-list"></ul>
+        <footer class="modal-foot">
+          <button type="button" class="btn-secondary btn-lg" data-close>Cancelar</button>
+          <button type="submit" class="btn-primary btn-compact" id="queue-submit" disabled>
+            <span id="queue-submit-label">Seleccione un medicamento</span>
+          </button>
+        </footer>
+      </form>
+    </dialog>
+
     <dialog class="modal" id="restock-dialog" aria-labelledby="restock-title">
       <form class="modal-form" id="restock-form" novalidate>
         <header class="modal-head">

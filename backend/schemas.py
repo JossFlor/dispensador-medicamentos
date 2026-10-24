@@ -42,8 +42,16 @@ class SolicitudReposicion(BaseModel):
     )
 
 
+class MedicamentoDetectado(BaseModel):
+    color: ColorMedicamento
+    nombre: str
+    dosis: str
+    bandeja: str
+    fragmento: str | None = None
+
+
 class RespuestaSolicitud(BaseModel):
-    status: Literal["entregado"]
+    status: Literal["completado"]
     color: ColorMedicamento
     inventario: Inventario
     receta_id: str | None = None
@@ -83,6 +91,10 @@ class ValidacionReceta(BaseModel):
     motivo: str
     fragmento: str | None = Field(description="Línea de la receta donde se encontró el medicamento")
     texto_ocr: str
+    detectados: list[MedicamentoDetectado] = Field(
+        default_factory=list,
+        description="Medicamentos del catálogo leídos en la receta. Con más de uno, el kiosko deja elegir la cola.",
+    )
 
 
 class RegistroReceta(ValidacionReceta):

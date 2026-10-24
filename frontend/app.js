@@ -34,6 +34,7 @@ const state = {
   rxArchivo: null,
   validandoReceta: false,
   receta: null,
+  cola: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -79,6 +80,11 @@ const els = {
   rxValidate: $("rx-validate"),
   rxDiscard: $("rx-discard"),
   rxChip: $("rx-chip"),
+  queueDialog: $("queue-dialog"),
+  queueForm: $("queue-form"),
+  queueList: $("queue-list"),
+  queueSubmit: $("queue-submit"),
+  queueSubmitLabel: $("queue-submit-label"),
 };
 
 const buscarMed = (color) => MEDICAMENTOS.find((m) => m.color === color);
@@ -274,22 +280,9 @@ function seleccionar(color) {
   render();
 }
 
-async function dispensar() {
-  const med = buscarMed(state.seleccion);
-  if (!med || state.enCurso) return;
-  const nombre = nombreCompleto(med);
-  const recetaId = state.receta?.color === med.color ? state.receta.id : null;
-
-  state.enCurso = true;
-  render();
-  els.progressTitle.textContent = nombre;
-  setProgreso("dispensando", "active", `${med.bandeja}: el robot está preparando la entrega…`);
-  iniciarCronometro();
-  addLog(`Orden de dispensación: ${nombre} (${med.bandeja})${recetaId ? " con receta validada" : ""}`);
-
+async function pedirAlRobot(med, recetaId) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   try {
     const res = await fetch("/solicitar", {
       method: "POST",
@@ -299,25 +292,64 @@ async function dispensar() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(mensajeError(res, data));
-
-    state.inventarioVersion += 1;
-    state.enCurso = false;
-    state.seleccion = null;
-    if (recetaId) descartarReceta();
-    setInventario(data.inventario ?? state.inventario);
-    setProgreso("entregada", "done", `Entregado a las ${fmtTime(new Date())}. Retire el medicamento de la bandeja.`);
-    addLog(`Dispensación completada: ${nombre}`, "success");
+    if (data.status !== "completado") throw new Error("El robot no confirmó la entrega.");
+    return data;
   } catch (err) {
-    const msg =
-      err.name === "AbortError"
-        ? "Tiempo de espera agotado."
-        : err instanceof TypeError
-          ? "No se pudo contactar con el servidor."
-          : err.message;
-    setProgreso("dispensando", "error", msg);
-    addLog(`Dispensación fallida: ${nombre}. ${msg}`, "error");
+    if (err.name === "AbortError") throw new Error("Tiempo de espera agotado.");
+    if (err instanceof TypeError) throw new Error("No se pudo contactar con el servidor.");
+    throw err;
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+async function dispensar() {
+  const med = buscarMed(state.seleccion);
+  if (!med || state.enCurso) return;
+  const recetaId = state.receta?.color === med.color ? state.receta.id : null;
+  await dispensarCola([{ ...med, recetaId }]);
+}
+
+/** One cube at a time. The next request starts only after status "completado". */
+async function dispensarCola(cola) {
+  if (state.enCurso || cola.length === 0) return;
+  state.cola = cola;
+  state.enCurso = true;
+  state.seleccion = cola[0].color;
+  render();
+  iniciarCronometro();
+
+  let entregados = 0;
+  try {
+    for (let i = 0; i < cola.length; i++) {
+      const med = cola[i];
+      const nombre = nombreCompleto(med);
+      const puesto = cola.length > 1 ? ` (${i + 1} de ${cola.length})` : "";
+      state.seleccion = med.color;
+      render();
+      els.progressTitle.textContent = `${nombre}${puesto}`;
+      setProgreso("dispensando", "active", `${med.bandeja}: el robot está preparando la entrega…`);
+      addLog(`Orden de dispensación${puesto}: ${nombre} (${med.bandeja})${med.recetaId ? " con receta validada" : ""}`);
+
+      const data = await pedirAlRobot(med, med.recetaId ?? null);
+      entregados += 1;
+      state.inventarioVersion += 1;
+      setInventario(data.inventario ?? state.inventario);
+      addLog(`Dispensación completada${puesto}: ${nombre}`, "success");
+    }
+    state.seleccion = null;
+    state.cola = [];
+    descartarReceta();
+    const cierre = entregados > 1 ? `Entregados ${entregados} medicamentos` : "Entregado";
+    setProgreso("entregada", "done", `${cierre} a las ${fmtTime(new Date())}. Retire el medicamento de la bandeja.`);
+  } catch (err) {
+    const med = cola[entregados];
+    const nombre = med ? nombreCompleto(med) : "la orden";
+    const previos = entregados > 0 ? ` Se entregaron ${entregados} antes de detener la cola.` : "";
+    setProgreso("dispensando", "error", `${err.message}${previos}`);
+    addLog(`Dispensación fallida: ${nombre}. ${err.message}`, "error");
+    state.cola = [];
+  } finally {
     detenerCronometro();
     state.enCurso = false;
     render();
@@ -358,6 +390,18 @@ function buildAsistenteUI() {
   els.rxDiscard.addEventListener("click", () => {
     descartarReceta();
     render();
+  });
+  els.queueForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    confirmarCola();
+  });
+  els.queueList.addEventListener("change", actualizarColaModal);
+  const cerrarCola = () => {
+    if (!state.enCurso) els.queueDialog.close();
+  };
+  els.queueDialog.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", cerrarCola));
+  els.queueDialog.addEventListener("cancel", (e) => {
+    if (state.enCurso) e.preventDefault();
   });
 }
 
@@ -538,7 +582,14 @@ async function validarReceta() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(mensajeError(res, data));
 
-    if (data.autorizado) {
+    if (data.detectados?.length > 1) {
+      const nombres = data.detectados.map((m) => m.nombre).join(" y ");
+      pintarReceta("ok", "Varios medicamentos en la receta", data.motivo, {
+        badge: { estado: "info", texto: "Seleccione" },
+      });
+      addLog(`Receta leída: ${nombres}. Pendiente de elegir la cola.`, "info");
+      abrirCola(data.detectados);
+    } else if (data.autorizado) {
       state.receta = { id: data.id, color: data.color, medicamento: data.medicamento };
       const detalle = data.fragmento ? `${data.motivo} Detectado: «${data.fragmento}».` : data.motivo;
       pintarReceta("ok", "Receta validada por IA", detalle, { badge: { estado: "success", texto: "Autorizada" } });
@@ -560,6 +611,48 @@ async function validarReceta() {
     state.validandoReceta = false;
     render();
   }
+}
+
+function abrirCola(detectados) {
+  els.queueList.innerHTML = detectados
+    .map((m) => {
+      const stock = state.inventario[m.color];
+      const agotado = !(stock > 0);
+      return `
+        <li class="restock-row${agotado ? "" : " is-selected"}" data-color="${m.color}">
+          <label class="restock-select">
+            <input type="checkbox" value="${m.color}" ${agotado ? "disabled" : "checked"} />
+            <span class="checkbox" aria-hidden="true"></span>
+            <span class="tray-dot" data-color="${m.color}" aria-hidden="true"></span>
+            <span class="option-body">
+              <span class="option-name">${m.nombre} ${m.dosis}</span>
+              <span class="option-meta">${m.bandeja}${m.fragmento ? ` · «${m.fragmento}»` : ""}${agotado ? " · Agotado" : ""}</span>
+            </span>
+          </label>
+        </li>`;
+    })
+    .join("");
+  actualizarColaModal();
+  els.queueDialog.showModal();
+}
+
+function actualizarColaModal() {
+  const marcados = els.queueList.querySelectorAll("input:checked").length;
+  for (const row of els.queueList.querySelectorAll(".restock-row")) {
+    row.classList.toggle("is-selected", row.querySelector("input").checked);
+  }
+  els.queueSubmit.disabled = marcados === 0;
+  els.queueSubmitLabel.textContent =
+    marcados === 0 ? "Seleccione un medicamento" : `Dispensar ${marcados} ${marcados === 1 ? "cubo" : "cubos"}`;
+}
+
+function confirmarCola() {
+  const cola = [...els.queueList.querySelectorAll("input:checked")].map((input) => {
+    const med = buscarMed(input.value);
+    return { ...med, recetaId: null };
+  });
+  els.queueDialog.close();
+  dispensarCola(cola);
 }
 
 const clampStock = (v) => Math.min(MAX_STOCK, Math.max(0, Number.isFinite(v) ? Math.round(v) : 0));

@@ -18,6 +18,7 @@ from backend.schemas import (
     EstadoSistema,
     Inventario,
     Medicamento,
+    MedicamentoDetectado,
     RegistroReceta,
     RespuestaSolicitud,
     RespuestaVoz,
@@ -153,7 +154,7 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
         _dispensando = None
         _dispensador_lock.release()
 
-    return RespuestaSolicitud(status="entregado", color=color, inventario=inventario, receta_id=body.receta_id)
+    return RespuestaSolicitud(status="completado", color=color, inventario=inventario, receta_id=body.receta_id)
 
 
 @app.post(
@@ -215,6 +216,16 @@ def validar_receta(
 
     evaluacion = ocr_receta.evaluar(texto, color)
     med = evaluacion.medicamento
+    detectados = [
+        MedicamentoDetectado(
+            color=item.color,
+            nombre=item.nombre,
+            dosis=item.dosis,
+            bandeja=item.bandeja,
+            fragmento=ocr_receta._fragmento(texto, item),
+        )
+        for item in evaluacion.detectados
+    ]
     validacion = ValidacionReceta(
         id=uuid.uuid4().hex[:12],
         timestamp=datetime.now(timezone.utc),
@@ -224,8 +235,12 @@ def validar_receta(
         motivo=evaluacion.motivo,
         fragmento=evaluacion.fragmento,
         texto_ocr=" ".join(texto.split())[:MAX_TEXTO_OCR],
+        detectados=detectados,
     )
     recetas_log.registrar_validacion(validacion)
+    if len(detectados) > 1 and not color:
+        _registrar_actividad(f"Receta con varios medicamentos: {evaluacion.motivo}", "info")
+        return validacion
     if validacion.autorizado:
         _registrar_actividad(f"Receta validada por IA: {validacion.medicamento}", "success")
     else:
