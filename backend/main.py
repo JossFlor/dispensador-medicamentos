@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend import inventory, medicamentos, ocr_receta, recetas_log, voz
+from backend import inventory, medicamentos, ocr_receta, recetas_log, robot_control, voz
 from backend.inference_runner import InferenceError, InferenceTimeout, run_inference, usa_lelab
 from backend.schemas import (
     Actividad,
@@ -155,6 +155,24 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
         _dispensador_lock.release()
 
     return RespuestaSolicitud(status="completado", color=color, inventario=inventario, receta_id=body.receta_id)
+
+
+@app.post("/robot/freno")
+def frenar_robot() -> dict[str, str]:
+    """Stops the current LeLab rollout. The arm stays where the policy releases it."""
+    robot_control.publicar("freno")
+    detalle = robot_control.detener_lelab()
+    _registrar_actividad(f"Freno: {detalle}", "warning")
+    return {"status": "freno", "detail": detalle}
+
+
+@app.post("/robot/cubo-colocado")
+def cubo_colocado() -> dict[str, str]:
+    """Ends the rollout early and counts the delivery as successful."""
+    robot_control.publicar("cubo")
+    detalle = robot_control.detener_lelab()
+    _registrar_actividad("Cubo colocado: ejecución terminada por gerencia", "success")
+    return {"status": "cubo", "detail": detalle}
 
 
 @app.post(

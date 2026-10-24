@@ -36,6 +36,9 @@ const els = {
   robotMode: $("robot-mode"),
   robotCurrent: $("robot-current"),
   robotActivity: $("robot-activity"),
+  brakeBtn: $("brake-btn"),
+  cubeBtn: $("cube-btn"),
+  robotNote: $("robot-controls-note"),
   restockBtn: $("restock-btn"),
   restockDialog: $("restock-dialog"),
   restockForm: $("restock-form"),
@@ -56,7 +59,25 @@ function setConexion(ok) {
     els.robotState.dataset.state = "offline";
     els.robotStateLabel.textContent = "Sin conexión";
     els.restockBtn.disabled = true;
+    els.brakeBtn.disabled = true;
+    els.cubeBtn.disabled = true;
   }
+}
+
+async function ordenRobot(ruta, nota) {
+  els.brakeBtn.disabled = true;
+  els.cubeBtn.disabled = true;
+  els.robotNote.hidden = false;
+  els.robotNote.textContent = "Enviando orden al robot…";
+  try {
+    const res = await fetch(ruta, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+    els.robotNote.textContent = nota;
+  } catch (err) {
+    els.robotNote.textContent = err instanceof TypeError ? "No se pudo contactar con el servidor." : err.message;
+  }
+  await actualizar();
 }
 
 async function getJSON(url) {
@@ -69,6 +90,8 @@ function pintarEstado(estado) {
   inventario = estado.inventario;
   robotOcupado = estado.robot_ocupado;
   els.restockBtn.disabled = robotOcupado || reponiendo;
+  els.brakeBtn.disabled = false;
+  els.cubeBtn.disabled = !robotOcupado;
   let unidades = 0;
   for (const m of MEDICAMENTOS) {
     const n = inventario[m.color];
@@ -310,6 +333,12 @@ async function iniciar() {
     }
   }
   els.rows.innerHTML = MEDICAMENTOS.map(filaInventarioHTML).join("");
+  els.brakeBtn.addEventListener("click", () =>
+    ordenRobot("/robot/freno", "Freno enviado. El movimiento se detiene; el brazo se queda en su posición actual.")
+  );
+  els.cubeBtn.addEventListener("click", () =>
+    ordenRobot("/robot/cubo-colocado", "Cubo validado. La ejecución termina y la entrega cuenta como completada.")
+  );
   buildRestockUI();
   await actualizar();
   setInterval(() => {

@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import inventory, main, ocr_receta, recetas_log
+from backend import inventory, main, ocr_receta, recetas_log, robot_control
 from backend.inference_runner import InferenceError, InferenceTimeout, run_inference
 from backend.inventory import DEFAULT_STOCK
 from backend.schemas import COLORES
@@ -414,3 +414,19 @@ def test_gerente_servido(client):
     res = client.get("/gerente.html")
     assert res.status_code == 200
     assert "Panel de gerencia" in res.text
+    assert "Freno" in res.text
+    assert "Cubo colocado" in res.text
+
+
+def test_freno_y_cubo_avisan_a_la_orden_en_curso(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(robot_control, "CONTROL_PATH", tmp_path / "robot_control.json")
+    monkeypatch.setattr(robot_control, "detener_lelab", lambda: "Inferencia detenida")
+
+    freno = client.post("/robot/freno")
+    assert freno.status_code == 200
+    assert freno.json()["status"] == "freno"
+    assert json.loads((tmp_path / "robot_control.json").read_text())["accion"] == "freno"
+
+    cubo = client.post("/robot/cubo-colocado")
+    assert cubo.status_code == 200
+    assert json.loads((tmp_path / "robot_control.json").read_text())["accion"] == "cubo"

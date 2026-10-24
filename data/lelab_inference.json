@@ -7,7 +7,7 @@
     "amarillo": "InakiAM/cubo_amarillo_v1@root"
   },
   "task": "",
-  "duration_s": 60,
+  "duration_s": 18,
   "cameras": {
     "Robot": {
       "type": "opencv",

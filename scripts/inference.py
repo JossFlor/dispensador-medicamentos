@@ -61,6 +61,21 @@ def _http_json(
         raise RuntimeError(f"LeLab {path} → HTTP {e.code}: {detail}") from e
 
 
+def _orden_gerente(inicio: float) -> str | None:
+    path = PROJECT_ROOT / "data" / "robot_control.json"
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if float(data.get("ts") or 0) < inicio:
+        return None
+    path.unlink(missing_ok=True)
+    accion = data.get("accion")
+    return accion if accion in ("freno", "cubo") else None
+
+
 def _policy_ref(config: dict[str, Any], color: str) -> str:
     policies = config.get("policies_by_color") or {}
     ref = policies.get(color) or ""
@@ -90,8 +105,24 @@ def run_lelab(color: str, base_url: str, config_path: Path) -> int:
     poll_deadline = time.time() + duration_s + 90
 
     _http_json(base_url, "/start-inference", method="POST", body=payload, timeout=120)
+    inicio = time.time()
 
     while time.time() < poll_deadline:
+        orden = _orden_gerente(inicio)
+        if orden == "freno":
+            try:
+                _http_json(base_url, "/stop-inference", method="POST", body={}, timeout=15)
+            except RuntimeError:
+                pass
+            print("Freno accionado: movimiento detenido", file=sys.stderr)
+            return 2
+        if orden == "cubo":
+            try:
+                _http_json(base_url, "/stop-inference", method="POST", body={}, timeout=15)
+            except RuntimeError:
+                pass
+            print(f"Entregando cubo {color}")
+            return 0
         status = _http_json(base_url, "/inference-status", timeout=30)
         if not status.get("inference_active"):
             if status.get("exited") or status.get("exit_code") is not None:
