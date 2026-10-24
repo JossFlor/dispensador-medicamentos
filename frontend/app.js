@@ -21,6 +21,7 @@ const state = {
   validandoReceta: false,
   receta: null,
   cola: [],
+  coloresRobot: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -99,14 +100,19 @@ function render() {
     const tieneDato = Number.isInteger(n);
     const opt = els.options.querySelector(`.med-option[data-color="${m.color}"]`);
     const input = opt.querySelector("input");
+    const sinModelo = !robotSabe(m.color);
     const sinStock = !tieneDato || n <= 0;
-    if (sinStock && !state.enCurso && state.seleccion === m.color) state.seleccion = null;
-    input.disabled = state.enCurso || sinStock;
+    if ((sinStock || sinModelo) && !state.enCurso && state.seleccion === m.color) state.seleccion = null;
+    input.disabled = state.enCurso || sinStock || sinModelo;
     input.checked = state.seleccion === m.color;
     opt.classList.toggle("is-selected", input.checked);
     opt.classList.toggle("is-disabled", input.disabled);
-    opt.dataset.empty = String(tieneDato && n <= 0);
-    opt.querySelector(".option-stock").textContent = tieneDato && n <= 0 ? "Agotado" : "";
+    opt.dataset.empty = String(sinModelo || (tieneDato && n <= 0));
+    opt.querySelector(".option-stock").textContent = sinModelo
+      ? "No disponible"
+      : tieneDato && n <= 0
+        ? "Agotado"
+        : "";
   }
 
   const med = buscarMed(state.seleccion);
@@ -119,7 +125,7 @@ function render() {
       : med
         ? `Dispensar ${nombreCompleto(med)}`
         : "Seleccione un medicamento";
-  els.rxChip.hidden = !(med && state.receta?.color === med.color);
+  els.rxChip.hidden = !(med && recetaPara(med.color));
 
   const ocupado = state.enCurso || !state.conectado;
   els.voiceBtn.disabled = !SpeechRecognition || state.interpretandoVoz || (ocupado && !state.escuchando);
@@ -202,8 +208,17 @@ function detenerCronometro() {
   clearInterval(cronometro);
 }
 
+function robotSabe(color) {
+  return !state.coloresRobot || state.coloresRobot.includes(color);
+}
+
 function mensajeError(res, data) {
-  if (res.status === 502) return "El robot de dispensación reportó un fallo. Revise la bandeja.";
+  if (res.status === 502) {
+    const detalle = typeof data.detail === "string" ? data.detail : "";
+    if (detalle.startsWith("La cámara")) return detalle;
+    if (detalle.includes("No se pudo conectar a LeLab")) return "El robot está desconectado. Avise al personal.";
+    return "El robot de dispensación reportó un fallo. Revise la bandeja.";
+  }
   if (res.status === 504) return "El robot no respondió a tiempo.";
   const detail = data.detail || res.statusText || `HTTP ${res.status}`;
   return Array.isArray(detail) ? detail.map((d) => d.msg).join(", ") : String(detail);
@@ -216,6 +231,7 @@ async function fetchEstado() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     setConexion(true);
+    state.coloresRobot = data.colores_robot ?? null;
     if (version === state.inventarioVersion) setInventario(data.inventario);
     pintarRobot(data);
   } catch {
@@ -252,11 +268,14 @@ async function pedirAlRobot(med, recetaId) {
   }
 }
 
+function recetaPara(color) {
+  return state.receta?.colores.includes(color) ? state.receta.id : null;
+}
+
 async function dispensar() {
   const med = buscarMed(state.seleccion);
   if (!med || state.enCurso) return;
-  const recetaId = state.receta?.color === med.color ? state.receta.id : null;
-  await dispensarCola([{ ...med, recetaId }]);
+  await dispensarCola([{ ...med, recetaId: recetaPara(med.color) }]);
 }
 
 /** One cube at a time. The next request starts only after status "completado". */
@@ -318,6 +337,10 @@ function setAsistente(tono, texto) {
 function sugerir(color, origen) {
   const med = buscarMed(color);
   if (!med) return false;
+  if (!robotSabe(color)) {
+    setAsistente("warning", `${origen}: ${nombreCompleto(med)}, que el robot todavía no entrega. Avise al personal.`);
+    return false;
+  }
   if (!(state.inventario[color] > 0)) {
     setAsistente("warning", `${origen}: ${nombreCompleto(med)}, pero está agotado. Avise al personal.`);
     return false;
@@ -535,13 +558,16 @@ async function validarReceta() {
 
     if (data.detectados?.length > 1) {
       const nombres = data.detectados.map((m) => m.nombre).join(" y ");
+      if (data.autorizado) {
+        state.receta = { id: data.id, colores: data.detectados.map((m) => m.color), medicamento: data.medicamento };
+      }
       pintarReceta("ok", "Varios medicamentos en la receta", data.motivo, {
         badge: { estado: "info", texto: "Seleccione" },
       });
       addLog(`Receta leída: ${nombres}. Pendiente de elegir la cola.`, "info");
       abrirCola(data.detectados);
     } else if (data.autorizado) {
-      state.receta = { id: data.id, color: data.color, medicamento: data.medicamento };
+      state.receta = { id: data.id, colores: [data.color], medicamento: data.medicamento };
       const detalle = data.fragmento ? `${data.motivo} Detectado: «${data.fragmento}».` : data.motivo;
       pintarReceta("ok", "Receta validada por IA", detalle, { badge: { estado: "success", texto: "Autorizada" } });
       addLog(`Receta validada por IA: ${data.medicamento}`, "success");
@@ -568,7 +594,7 @@ function abrirCola(detectados) {
   els.queueList.innerHTML = detectados
     .map((m) => {
       const stock = state.inventario[m.color];
-      const agotado = !(stock > 0);
+      const agotado = !(stock > 0) || !robotSabe(m.color);
       return `
         <li class="restock-row${agotado ? "" : " is-selected"}" data-color="${m.color}">
           <label class="restock-select">
@@ -577,7 +603,7 @@ function abrirCola(detectados) {
             <span class="tray-dot" data-color="${m.color}" aria-hidden="true"></span>
             <span class="option-body">
               <span class="option-name">${m.nombre} ${m.dosis}</span>
-              <span class="option-meta">${m.bandeja}${m.fragmento ? ` · «${m.fragmento}»` : ""}${agotado ? " · Agotado" : ""}</span>
+              <span class="option-meta">${m.bandeja}${m.fragmento ? ` · «${m.fragmento}»` : ""}${!robotSabe(m.color) ? " · No disponible" : agotado ? " · Agotado" : ""}</span>
             </span>
           </label>
         </li>`;
@@ -600,7 +626,7 @@ function actualizarColaModal() {
 function confirmarCola() {
   const cola = [...els.queueList.querySelectorAll("input:checked")].map((input) => {
     const med = buscarMed(input.value);
-    return { ...med, recetaId: null };
+    return { ...med, recetaId: recetaPara(med.color) };
   });
   els.queueDialog.close();
   dispensarCola(cola);

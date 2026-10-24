@@ -109,6 +109,6 @@ def evaluar(texto: str, color: ColorMedicamento | None) -> Evaluacion:
         return Evaluacion(False, None, "No se reconoció ningún medicamento del catálogo en la receta.", None, [])
     if len(encontrados) > 1:
         nombres = " y ".join(med.nombre for med in encontrados)
-        return Evaluacion(False, None, f"La receta incluye {nombres}.", None, encontrados)
+        return Evaluacion(True, None, f"La receta incluye {nombres}.", None, encontrados)
     med = encontrados[0]
     return Evaluacion(True, med, f"La receta incluye {med.nombre}.", _fragmento(texto, med), encontrados)

@@ -15,6 +15,7 @@ from backend.inference_runner import (
     CODIGO_CUBO_NO_DETECTADO,
     InferenceError,
     InferenceTimeout,
+    colores_con_modelo,
     run_inference,
     usa_lelab,
 )
@@ -102,6 +103,7 @@ def get_estado() -> EstadoSistema:
         robot_ocupado=_dispensador_lock.locked(),
         dispensando=_dispensando,
         modo_robot="lelab" if usa_lelab() else "stub",
+        colores_robot=colores_con_modelo(),
         inventario=inventory.get_inventario(),
         ultima_actividad=_ultima_actividad,
     )
@@ -123,6 +125,8 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
         raise HTTPException(status_code=409, detail="El dispensador está ocupado con otra orden")
 
     try:
+        if color not in colores_con_modelo():
+            raise HTTPException(status_code=409, detail=f"El robot todavía no sabe entregar {_nombre(color)}.")
         try:
             inventory.validate_stock(color)
             if body.receta_id:
@@ -159,7 +163,7 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
         if body.receta_id:
-            recetas_log.registrar_dispensacion(body.receta_id)
+            recetas_log.registrar_dispensacion(body.receta_id, color)
         con_receta = " con receta validada" if body.receta_id else ""
         _registrar_actividad(f"Entregado {_nombre(color)}{con_receta}", "success")
     finally:
@@ -260,7 +264,11 @@ def validar_receta(
         id=uuid.uuid4().hex[:12],
         timestamp=datetime.now(timezone.utc),
         color=med.color if med else None,
-        medicamento=f"{med.nombre} {med.dosis}" if med else None,
+        medicamento=(
+            f"{med.nombre} {med.dosis}"
+            if med
+            else " y ".join(f"{d.nombre} {d.dosis}" for d in detectados) if evaluacion.autorizado else None
+        ),
         autorizado=evaluacion.autorizado,
         motivo=evaluacion.motivo,
         fragmento=evaluacion.fragmento,

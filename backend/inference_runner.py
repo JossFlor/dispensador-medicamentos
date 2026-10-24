@@ -1,7 +1,9 @@
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import get_args
 
 from backend.schemas import ColorMedicamento
 
@@ -27,6 +29,28 @@ class InferenceTimeout(InferenceError):
 
 def usa_lelab() -> bool:
     return os.environ.get("USE_LELAB", "").strip().lower() in ("1", "true", "yes")
+
+
+def _config_lelab() -> Path:
+    elegido = os.environ.get("LELAB_CONFIG")
+    if elegido:
+        return Path(elegido)
+    mac = PROJECT_ROOT / "data" / "lelab_inference.mac.json"
+    if sys.platform == "darwin" and mac.is_file():
+        return mac
+    return PROJECT_ROOT / "data" / "lelab_inference.json"
+
+
+def colores_con_modelo() -> list[str]:
+    """Colors the robot can deliver. In simulation every tray works."""
+    colores = list(get_args(ColorMedicamento))
+    if not usa_lelab():
+        return colores
+    try:
+        politicas = json.loads(_config_lelab().read_text(encoding="utf-8")).get("policies_by_color") or {}
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [c for c in colores if politicas.get(c)]
 
 
 def _inference_timeout() -> int:

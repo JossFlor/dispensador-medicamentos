@@ -131,7 +131,9 @@ function pintarRecetas(recetas) {
     badge.textContent = r.autorizado ? "Autorizada" : "Rechazada";
     celda(tr, "").append(badge);
     celda(tr, r.fragmento ? `${r.motivo} «${r.fragmento}»` : r.motivo, "col-fragmento");
-    celda(tr, r.dispensada_en ? fmtTime(new Date(r.dispensada_en)) : "—", "col-dispensada");
+    const total = r.detectados?.length > 1 && r.autorizado ? r.detectados.length : 0;
+    const hora = r.dispensada_en ? fmtTime(new Date(r.dispensada_en)) : "—";
+    celda(tr, total && r.dispensada_en ? `${hora} · ${r.dispensados.length} de ${total}` : hora, "col-dispensada");
     return tr;
   });
   els.recetas.replaceChildren(...filas);

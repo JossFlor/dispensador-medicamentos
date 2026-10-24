@@ -67,6 +67,7 @@ class EstadoSistema(BaseModel):
     robot_ocupado: bool
     dispensando: ColorMedicamento | None
     modo_robot: Literal["lelab", "stub"]
+    colores_robot: list[ColorMedicamento] = Field(description="Bandejas que el robot sabe entregar")
     inventario: Inventario
     ultima_actividad: Actividad | None
 
@@ -99,3 +100,6 @@ class ValidacionReceta(BaseModel):
 
 class RegistroReceta(ValidacionReceta):
     dispensada_en: datetime | None = None
+    dispensados: list[ColorMedicamento] = Field(
+        default_factory=list, description="Medicamentos ya entregados con esta receta"
+    )

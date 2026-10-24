@@ -325,9 +325,26 @@ def test_receta_con_otro_medicamento_se_rechaza(client, ocr):
 def test_receta_con_varios_medicamentos_devuelve_la_lista(client, ocr):
     ocr["valor"] = "Paracetamol 500 mg\nIbuprofeno 400 mg"
     body = validar(client).json()
-    assert body["autorizado"] is False
+    assert body["autorizado"] is True
+    assert body["color"] is None
     assert [m["color"] for m in body["detectados"]] == ["rojo", "amarillo"]
     assert body["detectados"][0]["fragmento"] == "Paracetamol 500 mg"
+
+
+def test_receta_con_varios_medicamentos_autoriza_cada_uno_una_vez(client, inv_path, robot, ocr):
+    write_inv(inv_path)
+    ocr["valor"] = "Paracetamol 500 mg\nIbuprofeno 400 mg"
+    receta_id = validar(client).json()["id"]
+
+    for color in ("rojo", "amarillo"):
+        assert client.post("/solicitar", json={"color": color, "receta_id": receta_id}).status_code == 200
+    assert client.post("/solicitar", json={"color": "rojo", "receta_id": receta_id}).status_code == 409
+    assert client.post("/solicitar", json={"color": "verde", "receta_id": receta_id}).status_code == 409
+    assert robot == ["rojo", "amarillo"]
+
+    registro = client.get("/recetas").json()[0]
+    assert registro["dispensados"] == ["rojo", "amarillo"]
+    assert registro["dispensada_en"] is not None
 
 
 def test_receta_sin_color_detecta_el_medicamento(client, ocr):
@@ -430,3 +447,16 @@ def test_freno_y_cubo_avisan_a_la_orden_en_curso(client, tmp_path, monkeypatch):
     cubo = client.post("/robot/cubo-colocado")
     assert cubo.status_code == 200
     assert json.loads((tmp_path / "robot_control.json").read_text())["accion"] == "cubo"
+
+
+def test_color_sin_modelo_no_mueve_el_robot(client, inv_path, robot, monkeypatch, tmp_path):
+    write_inv(inv_path)
+    config = tmp_path / "lelab.json"
+    config.write_text(json.dumps({"policies_by_color": {"rojo": "InakiAM/cubo_rojo_v4@root"}}))
+    monkeypatch.setenv("USE_LELAB", "1")
+    monkeypatch.setenv("LELAB_CONFIG", str(config))
+
+    assert client.get("/estado").json()["colores_robot"] == ["rojo"]
+    res = client.post("/solicitar", json={"color": "verde"})
+    assert res.status_code == 409
+    assert robot == []
