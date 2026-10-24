@@ -97,30 +97,98 @@ def _lelab_payload(config: dict[str, Any], color: str) -> dict[str, Any]:
     }
 
 
+class _Vision:
+    """Validación con la Webcam fija. Si no está calibrada o falta OpenCV, no interviene."""
+
+    def __init__(self, color: str):
+        self.color = color
+        self.cfg: dict[str, Any] = {}
+        self.base = 0.0
+        self.vigilante = None
+        try:
+            import vision_cubo
+        except ImportError as e:
+            print(f"Validación visual desactivada (falta OpenCV: {e})", file=sys.stderr)
+            return
+        cfg = vision_cubo.leer_config()
+        if not vision_cubo.activa(cfg):
+            return
+        try:
+            self.base = vision_cubo.linea_base(cfg, color)
+        except RuntimeError as e:
+            print(f"Validación visual desactivada: {e}", file=sys.stderr)
+            return
+        self.cfg = cfg
+        self._vc = vision_cubo
+        print(f"Validación visual activa (zona con {self.base:.1%} de {color} antes de empezar)", flush=True)
+
+    @property
+    def activa(self) -> bool:
+        return bool(self.cfg)
+
+    def vigilar(self) -> None:
+        if self.activa and self.cfg.get("live_index") is not None:
+            self.vigilante = self._vc.Vigilante(self.cfg, self.color, self.base)
+            self.vigilante.start()
+
+    def detectado_en_vivo(self) -> bool:
+        return bool(self.vigilante and self.vigilante.detectado.is_set())
+
+    def detener(self) -> None:
+        if self.vigilante:
+            self.vigilante.parar.set()
+            self.vigilante.join(timeout=3)
+            if self.vigilante.error:
+                print(f"Vigilancia en vivo sin cámara: {self.vigilante.error}", file=sys.stderr)
+            self.vigilante = None
+
+    def verificar_final(self) -> bool:
+        self.detener()
+        try:
+            return self._vc.verificar(self.cfg, self.color, self.base)
+        except RuntimeError as e:
+            print(str(e), file=sys.stderr)
+            return False
+
+
+def _detener_lelab(base_url: str) -> None:
+    try:
+        _http_json(base_url, "/stop-inference", method="POST", body={}, timeout=15)
+    except RuntimeError:
+        pass
+
+
 def run_lelab(color: str, base_url: str, config_path: Path) -> int:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     payload = _lelab_payload(config, color)
     print(f"LeLab {color}: {payload['policy_ref']}", flush=True)
-    duration_s = payload["duration_s"]
-    poll_deadline = time.time() + duration_s + 90
+    vision = _Vision(color)
+    try:
+        return _rollout(color, base_url, payload, vision)
+    finally:
+        vision.detener()
+
+
+def _rollout(color: str, base_url: str, payload: dict[str, Any], vision: _Vision) -> int:
+    poll_deadline = time.time() + payload["duration_s"] + 90
 
     _http_json(base_url, "/start-inference", method="POST", body=payload, timeout=120)
     inicio = time.time()
+    vision.vigilar()
 
     while time.time() < poll_deadline:
         orden = _orden_gerente(inicio)
         if orden == "freno":
-            try:
-                _http_json(base_url, "/stop-inference", method="POST", body={}, timeout=15)
-            except RuntimeError:
-                pass
+            _detener_lelab(base_url)
             print("Freno accionado: movimiento detenido", file=sys.stderr)
             return 2
         if orden == "cubo":
-            try:
-                _http_json(base_url, "/stop-inference", method="POST", body={}, timeout=15)
-            except RuntimeError:
-                pass
+            _detener_lelab(base_url)
+            print(f"Entregando cubo {color}")
+            return 0
+        if vision.detectado_en_vivo():
+            _detener_lelab(base_url)
+            print(f"Cubo {color} detectado en la zona de entrega")
             print(f"Entregando cubo {color}")
             return 0
         status = _http_json(base_url, "/inference-status", timeout=30)
@@ -128,6 +196,9 @@ def run_lelab(color: str, base_url: str, config_path: Path) -> int:
             if status.get("exited") or status.get("exit_code") is not None:
                 code = status.get("exit_code")
                 if code == 0:
+                    if vision.activa and not vision.verificar_final():
+                        print(f"Cubo {color} no detectado en la zona de entrega", file=sys.stderr)
+                        return 3
                     print(f"Entregando cubo {color}")
                     return 0
                 print(
@@ -139,10 +210,7 @@ def run_lelab(color: str, base_url: str, config_path: Path) -> int:
         time.sleep(0.5)
 
     print("Timeout esperando a que LeLab termine la inferencia", file=sys.stderr)
-    try:
-        _http_json(base_url, "/stop-inference", method="POST", body={}, timeout=15)
-    except RuntimeError:
-        pass
+    _detener_lelab(base_url)
     return 1
 
 

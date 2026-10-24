@@ -220,6 +220,20 @@ El campo `tasks_by_color` en el JSON permite un `task` distinto por bandeja si e
 
 > Cada orden lanza de nuevo el rollout en LeLab (hasta `duration_s`, p. ej. 60 s). Cierra vistas de cámara en LeLab antes de dispensar desde la web.
 
+### Validación visual del cubo (Webcam fija)
+
+La Webcam que ve la mesa confirma que el cubo quedó en la zona de entrega: zona marcada (ROI) + máscara HSV del color + umbral sobre la foto inicial. Configuración en [`data/vision.json`](data/vision.json) (Mac: `data/vision.mac.json`, o `VISION_CONFIG`). Mientras `roi` sea `null` no interviene.
+
+1. **Calibrar** (en la máquina con el robot y pantalla): `python scripts/vision_cubo.py calibrar`. `z` marca la zona, clic sobre un cubo + `1/2/3/4` guarda rojo/amarillo/verde/azul, `+`/`-` ajusta el umbral, `g` guarda.
+2. **Probar:** `python scripts/vision_cubo.py verificar --color rojo`.
+
+Modos:
+
+- **Al terminar** (por defecto): cuando LeLab acaba, se toma la foto. Sin cubo → la orden falla (código 3), no baja el stock y el kiosko lo avisa.
+- **En vivo** (Ubuntu): `./scripts/camara_compartida.sh /dev/video2` en otra terminal, luego Webcam `camera_index: 10` en `lelab_inference.json` y `live_index: 11` en `vision.json`. En cuanto el cubo lleva `hold_s` quieto en la zona se llama a `/stop-inference`.
+
+La validación corre donde se ejecuta la web: con el túnel SSH (web en el Mac, robot en Ubuntu) deja `roi: null` en `vision.mac.json`, porque la cámara del Mac no ve la mesa.
+
 ## Tests
 
 ```bash

@@ -11,7 +11,13 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend import inventory, medicamentos, ocr_receta, recetas_log, robot_control, voz
-from backend.inference_runner import InferenceError, InferenceTimeout, run_inference, usa_lelab
+from backend.inference_runner import (
+    CODIGO_CUBO_NO_DETECTADO,
+    InferenceError,
+    InferenceTimeout,
+    run_inference,
+    usa_lelab,
+)
 from backend.schemas import (
     Actividad,
     ColorMedicamento,
@@ -136,6 +142,12 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
             raise HTTPException(status_code=504, detail=str(e)) from e
         except InferenceError as e:
             logger.error("Inferencia falló: %s stderr=%s", e, e.stderr)
+            if e.codigo == CODIGO_CUBO_NO_DETECTADO:
+                _registrar_actividad(f"La cámara no vio {_nombre(color)} en la zona de entrega", "error")
+                raise HTTPException(
+                    status_code=502,
+                    detail="La cámara no detectó el cubo en la zona de entrega. Revisa la bandeja e inténtalo de nuevo.",
+                ) from e
             _registrar_actividad(f"Fallo del robot al dispensar {_nombre(color)}", "error")
             detail = str(e)
             if e.stderr:

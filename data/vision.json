@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "camera_index": 2,
+  "live_index": null,
+  "width": 640,
+  "height": 480,
+  "roi": null,
+  "min_ratio": 0.04,
+  "hold_s": 1.0,
+  "colors": {}
+}

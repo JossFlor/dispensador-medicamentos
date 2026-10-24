@@ -11,10 +11,14 @@ DEFAULT_TIMEOUT_S = 120
 LELAB_TIMEOUT_S = 200
 
 
+CODIGO_CUBO_NO_DETECTADO = 3
+
+
 class InferenceError(Exception):
-    def __init__(self, message: str, stderr: str | None = None):
+    def __init__(self, message: str, stderr: str | None = None, codigo: int | None = None):
         super().__init__(message)
         self.stderr = stderr
+        self.codigo = codigo
 
 
 class InferenceTimeout(InferenceError):
@@ -59,5 +63,6 @@ def run_inference(color: ColorMedicamento, timeout: int | None = None) -> str:
         raise InferenceError(
             f"Inferencia falló para color {color} (código {result.returncode})",
             stderr=err or None,
+            codigo=result.returncode,
         )
     return (result.stdout or "").strip()
