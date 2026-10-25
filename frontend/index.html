@@ -168,9 +168,14 @@
                 </li>
               </ol>
               <p class="progress-detail" id="progress-detail"></p>
-              <button type="button" class="btn-secondary queue-continue" id="queue-continue" hidden>
-                Ya lo retiré, continuar
-              </button>
+              <div class="zone-wait" id="zone-wait" hidden>
+                <p class="zone-wait-kicker">Acción necesaria</p>
+                <p class="zone-wait-title" id="zone-wait-title">Retira el cubo de la zona de entrega</p>
+                <p class="zone-wait-detail" id="zone-wait-detail"></p>
+                <button type="button" class="btn-primary zone-wait-btn" id="queue-continue">
+                  Ya lo retiré, continuar
+                </button>
+              </div>
             </div>
 
             <div class="dispense-actions">

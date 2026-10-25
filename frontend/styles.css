@@ -673,8 +673,46 @@ body {
   background: var(--surface-alt);
 }
 
-.queue-continue {
-  margin-top: 0.75rem;
+.zone-wait {
+  margin-top: 1rem;
+  padding: 1.1rem 1rem 1rem;
+  border: 2px solid var(--warning);
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+}
+
+.zone-wait-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
+.zone-wait-title {
+  margin: 0 0 0.35rem;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.zone-wait-detail {
+  margin: 0 0 0.9rem;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+@keyframes zone-wait-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(242, 194, 0, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(242, 194, 0, 0.12);
+  }
 }
 
 .progress-head {
@@ -823,6 +861,23 @@ body {
 
 .btn-primary:hover:not(:disabled) {
   background: var(--primary-hover);
+}
+
+.zone-wait .btn-primary {
+  min-height: 58px;
+  font-size: 18px;
+  font-weight: 700;
+  border-color: #7a4a00;
+  background: var(--brand-yellow);
+  color: #1c1404;
+  box-shadow: 0 0 0 4px rgba(242, 194, 0, 0.35);
+  animation: zone-wait-pulse 1.6s ease-in-out infinite;
+}
+
+.zone-wait .btn-primary:hover:not(:disabled) {
+  background: #ddb000;
+  border-color: #7a4a00;
+  color: #1c1404;
 }
 
 .btn-primary:focus-visible {

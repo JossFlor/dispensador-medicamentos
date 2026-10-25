@@ -63,6 +63,9 @@ const els = {
   queueSubmit: $("queue-submit"),
   queueSubmitLabel: $("queue-submit-label"),
   queueContinue: $("queue-continue"),
+  zoneWait: $("zone-wait"),
+  zoneWaitTitle: $("zone-wait-title"),
+  zoneWaitDetail: $("zone-wait-detail"),
 };
 
 const buscarMed = (color) => MEDICAMENTOS.find((m) => m.color === color);
@@ -323,7 +326,7 @@ async function dispensarCola(cola) {
     state.cola = [];
   } finally {
     detenerCronometro();
-    els.queueContinue.hidden = true;
+    els.zoneWait.hidden = true;
     state.enCurso = false;
     render();
     pintarRobot();
@@ -335,12 +338,12 @@ async function dispensarCola(cola) {
 function esperarZonaLibre(entregado, siguiente) {
   const nombre = nombreCompleto(entregado);
   const luego = nombreCompleto(siguiente);
-  setProgreso(
-    "entregada",
-    "done",
-    `${nombre} quedó en la zona de entrega. Retírelo antes de seguir con ${luego}: si el robot lo ve ahí, intentará tomarlo otra vez.`
-  );
-  els.queueContinue.hidden = false;
+  setProgreso("entregada", "done", "El robot está parado. Falta retirar el cubo para continuar.");
+  els.zoneWaitTitle.textContent = `Retira ${nombre}`;
+  els.zoneWaitDetail.textContent = `Quedó en la zona de entrega. El robot no sigue con ${luego} hasta que lo quites: si lo ve ahí, intentará tomarlo otra vez.`;
+  els.queueContinue.textContent = `Ya lo retiré. Continuar con ${luego}`;
+  els.zoneWait.hidden = false;
+  els.zoneWait.scrollIntoView({ behavior: "smooth", block: "center" });
   return new Promise((resolve) => {
     let libres = 0;
     let cerrado = false;
@@ -348,7 +351,7 @@ function esperarZonaLibre(entregado, siguiente) {
       if (cerrado) return;
       cerrado = true;
       clearInterval(timer);
-      els.queueContinue.hidden = true;
+      els.zoneWait.hidden = true;
       els.queueContinue.removeEventListener("click", cerrar);
       resolve();
     };
