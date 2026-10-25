@@ -1,3 +1,4 @@
+@BravoRobots
 # Farmacias Similares · Sistema de Dispensación Automatizada
 
 Panel web de farmacia que controla un robot dispensador: inventario en tiempo real, órdenes de dispensación con confirmación, pedidos por voz, validación de recetas por OCR, reposición de stock y un panel de gerencia.
