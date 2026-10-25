@@ -13,6 +13,7 @@ const POLL_MS = 3000;
 const MAX_RECETAS = 50;
 const MAX_STOCK = 20;
 const MODOS = { lelab: "Robot físico (LeLab)", stub: "Simulación" };
+const fmtRegistro = (d) => `${d.toLocaleDateString("es-ES", { day: "2-digit", month: "short" })} ${fmtTime(d)}`;
 
 let MEDICAMENTOS = [];
 let inventario = {};
@@ -23,6 +24,7 @@ const $ = (id) => document.getElementById(id);
 const els = {
   rows: $("inventory-rows"),
   recetas: $("recetas-rows"),
+  entregas: $("entregas-rows"),
   lastSync: $("last-sync"),
   connection: $("connection"),
   connectionLabel: $("connection-label"),
@@ -123,14 +125,15 @@ function pintarRecetas(recetas) {
   const filas = recetas.map((r) => {
     const tr = document.createElement("tr");
     const fecha = new Date(r.timestamp);
-    celda(tr, `${fmtDate(fecha)} ${fmtTime(fecha)}`, "col-hora");
+    celda(tr, fmtRegistro(fecha), "col-hora");
     celda(tr, r.medicamento ?? "—");
     const badge = document.createElement("span");
     badge.className = "badge";
     badge.dataset.state = r.autorizado ? "success" : "error";
     badge.textContent = r.autorizado ? "Autorizada" : "Rechazada";
     celda(tr, "").append(badge);
-    celda(tr, r.fragmento ? `${r.motivo} «${r.fragmento}»` : r.motivo, "col-fragmento");
+    const detalle = r.fragmento ? `${r.motivo} «${r.fragmento}»` : r.motivo;
+    celda(tr, detalle, "col-fragmento").title = detalle;
     const total = r.detectados?.length > 1 && r.autorizado ? r.detectados.length : 0;
     const hora = r.dispensada_en ? fmtTime(new Date(r.dispensada_en)) : "—";
     celda(tr, total && r.dispensada_en ? `${hora} · ${r.dispensados.length} de ${total}` : hora, "col-dispensada");
@@ -139,12 +142,34 @@ function pintarRecetas(recetas) {
   els.recetas.replaceChildren(...filas);
 }
 
+function pintarEntregas(entregas) {
+  if (entregas.length === 0) {
+    els.entregas.innerHTML = `<tr class="log-empty"><td colspan="4">Todavía no se ha entregado ningún medicamento.</td></tr>`;
+    return;
+  }
+  const filas = entregas.map((e) => {
+    const tr = document.createElement("tr");
+    const fecha = new Date(e.timestamp);
+    celda(tr, fmtRegistro(fecha), "col-hora");
+    celda(tr, e.medicamento).title = e.medicamento;
+    celda(tr, e.bandeja).title = e.bandeja;
+    celda(tr, e.receta_id ? "Con receta" : "Sin receta");
+    return tr;
+  });
+  els.entregas.replaceChildren(...filas);
+}
+
 async function actualizar() {
   try {
-    const [estado, recetas] = await Promise.all([getJSON("/estado"), getJSON(`/recetas?limit=${MAX_RECETAS}`)]);
+    const [estado, recetas, entregas] = await Promise.all([
+      getJSON("/estado"),
+      getJSON(`/recetas?limit=${MAX_RECETAS}`),
+      getJSON(`/entregas?limit=${MAX_RECETAS}`),
+    ]);
     setConexion(true);
     pintarEstado(estado);
     pintarRecetas(recetas);
+    pintarEntregas(entregas);
     els.lastSync.textContent = `Sincronizado ${fmtTime(new Date())}`;
   } catch {
     setConexion(false);

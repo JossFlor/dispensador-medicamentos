@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 data/.inventario-*.tmp
 data/recetas.jsonl
+data/entregas.jsonl

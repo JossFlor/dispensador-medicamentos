@@ -98,6 +98,14 @@ class ValidacionReceta(BaseModel):
     )
 
 
+class RegistroEntrega(BaseModel):
+    timestamp: datetime
+    color: ColorMedicamento
+    medicamento: str
+    bandeja: str
+    receta_id: str | None = None
+
+
 class RegistroReceta(ValidacionReceta):
     dispensada_en: datetime | None = None
     dispensados: list[ColorMedicamento] = Field(

@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import inventory, main, ocr_receta, recetas_log, robot_control
+from backend import entregas_log, inventory, main, ocr_receta, recetas_log, robot_control
 from backend.inference_runner import InferenceError, InferenceTimeout, run_inference
 from backend.inventory import DEFAULT_STOCK
 from backend.schemas import COLORES
@@ -38,7 +38,14 @@ def recetas_path(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(inv_path, recetas_path):
+def entregas_path(tmp_path, monkeypatch):
+    path = tmp_path / "entregas.jsonl"
+    monkeypatch.setattr(entregas_log, "ENTREGAS_PATH", path)
+    return path
+
+
+@pytest.fixture
+def client(inv_path, recetas_path, entregas_path):
     with TestClient(main.app) as c:
         yield c
 
@@ -189,7 +196,9 @@ def test_escritura_atomica_sin_temporales(client, inv_path, robot):
     for _ in range(3):
         client.post("/solicitar", json={"color": "amarillo"})
     assert read_inv(inv_path)["amarillo"] == 0
-    assert [p.name for p in inv_path.parent.iterdir()] == ["inventario.json"]
+    nombres = {p.name for p in inv_path.parent.iterdir()}
+    assert "inventario.json" in nombres
+    assert not any(nombre.endswith(".tmp") for nombre in nombres)
 
 
 def test_inventario_legible_por_todos(client, inv_path, robot):
@@ -276,6 +285,11 @@ def test_estado_registra_ultima_entrega(client, inv_path, robot):
     actividad = client.get("/estado").json()["ultima_actividad"]
     assert actividad["nivel"] == "success"
     assert "Omeprazol" in actividad["evento"]
+    entregas = client.get("/entregas").json()
+    assert entregas[0]["color"] == "azul"
+    assert entregas[0]["medicamento"] == "Omeprazol 20 mg"
+    assert entregas[0]["bandeja"] == "Bandeja D · Azul"
+    assert entregas[0]["receta_id"] is None
 
 
 @pytest.mark.parametrize(
@@ -464,6 +478,7 @@ def test_gerente_servido(client):
     assert res.status_code == 200
     assert "Panel de gerencia" in res.text
     assert "Freno" in res.text
+    assert "Entregas" in res.text
     assert "Cubo colocado" not in res.text
 
 

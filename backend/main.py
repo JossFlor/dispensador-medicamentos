@@ -11,7 +11,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFi
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend import inventory, medicamentos, ocr_receta, recetas_log, robot_control, voz
+from backend import entregas_log, inventory, medicamentos, ocr_receta, recetas_log, robot_control, voz
 from backend.inference_runner import (
     CODIGO_CUBO_NO_DETECTADO,
     InferenceError,
@@ -27,6 +27,7 @@ from backend.schemas import (
     Inventario,
     Medicamento,
     MedicamentoDetectado,
+    RegistroEntrega,
     RegistroReceta,
     RespuestaSolicitud,
     RespuestaVoz,
@@ -117,6 +118,12 @@ def vision_zona(color: ColorMedicamento = Query(...)) -> dict:
         return {"activa": False, "ocupada": None, "ratio": None}
 
 
+@app.get("/entregas", response_model=list[RegistroEntrega])
+def get_entregas(limit: int = Query(default=50, ge=1, le=200)) -> list[RegistroEntrega]:
+    """Delivered medications, newest first. Only successful dispensations are recorded."""
+    return entregas_log.listar(limit)
+
+
 @app.get("/estado", response_model=EstadoSistema)
 def get_estado() -> EstadoSistema:
     return EstadoSistema(
@@ -184,6 +191,8 @@ def solicitar(body: SolicitudColor) -> RespuestaSolicitud:
             raise HTTPException(status_code=409, detail=str(e)) from e
         if body.receta_id:
             recetas_log.registrar_dispensacion(body.receta_id, color)
+        med = medicamentos.por_color(color)
+        entregas_log.registrar(color, f"{med.nombre} {med.dosis}", med.bandeja, body.receta_id)
         con_receta = " con receta validada" if body.receta_id else ""
         _registrar_actividad(f"Entregado {_nombre(color)}{con_receta}", "success")
     finally:

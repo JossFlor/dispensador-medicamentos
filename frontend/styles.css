@@ -1206,14 +1206,96 @@ body {
 
 /* Manager dashboard */
 
+body:has(.grid-gerente) {
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.page:has(.grid-gerente) {
+  display: flex;
+  flex-direction: column;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.page:has(.grid-gerente) .page-head {
+  margin-bottom: 0.85rem;
+}
+
 .grid-gerente {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  flex: 1;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto minmax(220px, 1fr);
   grid-template-areas:
     "inventory robot"
-    "recetas recetas";
-  gap: 1.25rem;
-  align-items: start;
+    "recetas entregas";
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.grid-gerente > .panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.grid-gerente .panel-head {
+  padding: 0.55rem 0.9rem;
+}
+
+.grid-gerente .table th,
+.grid-gerente .table td {
+  padding: 0.4rem 0.85rem;
+}
+
+.grid-gerente .panel-inventory .table-wrap {
+  flex: none;
+  max-height: none;
+  overflow: visible;
+}
+
+.grid-gerente .panel-recetas .table-wrap,
+.grid-gerente .panel-entregas .table-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  contain: size;
+}
+
+.grid-gerente .med-meta {
+  display: none;
+}
+
+@media (max-width: 1280px) {
+  .grid-gerente .stock {
+    min-width: 0;
+  }
+
+  .grid-gerente .stock-bar {
+    display: none;
+  }
+}
+
+.grid-gerente .panel-recetas .recetas-table,
+.grid-gerente .panel-entregas .recetas-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.grid-gerente .recetas-table th:first-child {
+  width: 10rem;
+}
+
+.grid-gerente .recetas-table th,
+.grid-gerente .recetas-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .grid-gerente .panel-robot {
@@ -1222,6 +1304,10 @@ body {
 
 .panel-recetas {
   grid-area: recetas;
+}
+
+.panel-entregas {
+  grid-area: entregas;
 }
 
 .robot-status {
@@ -1745,12 +1831,31 @@ body {
       "log";
   }
 
+  body:has(.grid-gerente) {
+    height: auto;
+    overflow: visible;
+  }
+
   .grid-gerente {
+    display: grid;
+    flex: none;
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    min-height: 0;
     grid-template-areas:
       "robot"
       "inventory"
-      "recetas";
+      "recetas"
+      "entregas";
+  }
+
+  .grid-gerente .panel-recetas .table-wrap,
+  .grid-gerente .panel-entregas .table-wrap {
+    flex: none;
+    max-height: 320px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    contain: none;
   }
 
   .panel-dispense {
