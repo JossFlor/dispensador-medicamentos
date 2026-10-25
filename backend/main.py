@@ -1,4 +1,5 @@
 import logging
+import sys
 import threading
 import uuid
 from contextlib import asynccontextmanager
@@ -95,6 +96,25 @@ def get_inventario() -> Inventario:
 @app.get("/medicamentos", response_model=list[Medicamento])
 def get_medicamentos() -> list[Medicamento]:
     return list(medicamentos.MEDICAMENTOS)
+
+
+def _vision_cubo():
+    scripts = str(PROJECT_ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import vision_cubo
+
+    return vision_cubo
+
+
+@app.get("/vision/zona")
+def vision_zona(color: ColorMedicamento = Query(...)) -> dict:
+    """Whether the delivery zone still shows this color. Inactive until the zone is calibrated."""
+    try:
+        return _vision_cubo().estado_zona(color)
+    except Exception as e:
+        logger.warning("Visión no disponible: %s", e)
+        return {"activa": False, "ocupada": None, "ratio": None}
 
 
 @app.get("/estado", response_model=EstadoSistema)

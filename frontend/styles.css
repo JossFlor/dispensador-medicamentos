@@ -673,6 +673,10 @@ body {
   background: var(--surface-alt);
 }
 
+.queue-continue {
+  margin-top: 0.75rem;
+}
+
 .progress-head {
   display: flex;
   justify-content: space-between;

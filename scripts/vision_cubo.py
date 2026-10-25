@@ -115,6 +115,26 @@ def linea_base(cfg: dict[str, Any], color: str) -> float:
     return ratios[len(ratios) // 2] if ratios else 0.0
 
 
+def estado_zona(color: str) -> dict[str, Any]:
+    """Dice si el color sigue en la zona de entrega. Sin calibrar, no abre la cámara."""
+    cfg = leer_config()
+    if not activa(cfg):
+        return {"activa": False, "ocupada": None, "ratio": None}
+    try:
+        cap = abrir_camara(fuente(cfg), cfg, espera_s=1.5)
+    except RuntimeError:
+        return {"activa": True, "ocupada": None, "ratio": None}
+    try:
+        frames = _muestras(cap, 3)
+    finally:
+        cap.release()
+    if not frames:
+        return {"activa": True, "ocupada": None, "ratio": None}
+    ratios = sorted(proporcion(f, color, cfg) for f in frames)
+    ratio = ratios[len(ratios) // 2]
+    return {"activa": True, "ocupada": hay_cubo(ratio, 0.0, cfg), "ratio": round(ratio, 4)}
+
+
 def verificar(cfg: dict[str, Any], color: str, base: float, espera_s: float = 6.0) -> bool:
     """Revisión final: la mayoría de fotogramas deben ver el cubo."""
     cap = abrir_camara(fuente(cfg), cfg, espera_s=espera_s)

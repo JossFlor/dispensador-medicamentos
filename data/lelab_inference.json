@@ -9,7 +9,7 @@
     "azul": "InakiAM/cubo_azul_5080@root"
   },
   "task": "",
-  "duration_s": 60,
+  "duration_s": 20,
   "cameras": {
     "Robot": {
       "type": "opencv",

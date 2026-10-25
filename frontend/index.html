@@ -168,6 +168,9 @@
                 </li>
               </ol>
               <p class="progress-detail" id="progress-detail"></p>
+              <button type="button" class="btn-secondary queue-continue" id="queue-continue" hidden>
+                Ya lo retiré, continuar
+              </button>
             </div>
 
             <div class="dispense-actions">
@@ -189,7 +192,7 @@
           <div>
             <h2 id="queue-title">Medicamentos en la receta</h2>
             <p class="modal-lead">
-              Marque los que hay que entregar. Se dispensan de uno en uno: el siguiente cubo no se pide hasta que el robot confirme el anterior.
+              Marque los que hay que entregar. Se dispensan de uno en uno. Cuando el robot deja un cubo, hay que retirarlo de la zona antes de que salga el siguiente: si lo ve ahí, intentará tomarlo otra vez.
             </p>
           </div>
           <button type="button" class="modal-close" data-close aria-label="Cerrar">

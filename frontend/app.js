@@ -62,6 +62,7 @@ const els = {
   queueList: $("queue-list"),
   queueSubmit: $("queue-submit"),
   queueSubmitLabel: $("queue-submit-label"),
+  queueContinue: $("queue-continue"),
 };
 
 const buscarMed = (color) => MEDICAMENTOS.find((m) => m.color === color);
@@ -306,6 +307,7 @@ async function dispensarCola(cola) {
       state.inventarioVersion += 1;
       setInventario(data.inventario ?? state.inventario);
       addLog(`Dispensación completada${puesto}: ${nombre}`, "success");
+      if (i < cola.length - 1) await esperarZonaLibre(med, cola[i + 1]);
     }
     state.seleccion = null;
     state.cola = [];
@@ -321,11 +323,52 @@ async function dispensarCola(cola) {
     state.cola = [];
   } finally {
     detenerCronometro();
+    els.queueContinue.hidden = true;
     state.enCurso = false;
     render();
     pintarRobot();
     fetchEstado();
   }
+}
+
+/** The next cube waits until this one leaves the delivery zone, so the arm does not pick it back up. */
+function esperarZonaLibre(entregado, siguiente) {
+  const nombre = nombreCompleto(entregado);
+  const luego = nombreCompleto(siguiente);
+  setProgreso(
+    "entregada",
+    "done",
+    `${nombre} quedó en la zona de entrega. Retírelo antes de seguir con ${luego}: si el robot lo ve ahí, intentará tomarlo otra vez.`
+  );
+  els.queueContinue.hidden = false;
+  return new Promise((resolve) => {
+    let libres = 0;
+    let cerrado = false;
+    const cerrar = () => {
+      if (cerrado) return;
+      cerrado = true;
+      clearInterval(timer);
+      els.queueContinue.hidden = true;
+      els.queueContinue.removeEventListener("click", cerrar);
+      resolve();
+    };
+    els.queueContinue.addEventListener("click", cerrar);
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/vision/zona?color=${entregado.color}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.activa && data.ocupada === false) {
+          libres += 1;
+          if (libres >= 2) cerrar();
+        } else {
+          libres = 0;
+        }
+      } catch {
+        libres = 0;
+      }
+    }, 800);
+  });
 }
 
 function setAsistente(tono, texto) {

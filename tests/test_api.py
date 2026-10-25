@@ -367,6 +367,12 @@ def test_receta_sin_ocr_instalado_devuelve_503(client, monkeypatch):
     assert validar(client, "rojo").status_code == 503
 
 
+def test_zona_sin_calibrar_no_bloquea(client):
+    res = client.get("/vision/zona", params={"color": "rojo"})
+    assert res.status_code == 200
+    assert res.json()["activa"] is False
+
+
 def test_imagen_invalida_devuelve_422(client):
     assert validar(client, "rojo").status_code == 422
 
