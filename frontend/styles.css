@@ -1044,6 +1044,16 @@ body {
   background: var(--surface);
 }
 
+.rx-file:not([hidden]) {
+  display: grid;
+  place-items: center;
+  object-fit: unset;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .rx-body {
   flex: 1;
   display: flex;

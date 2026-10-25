@@ -138,7 +138,7 @@ En la red local del hackathon, usa la IP de tu máquina: `http://<tu-ip>:8080`
 El botón **Dispensar** funciona igual que antes; la voz y la receta son ayudas que se pueden usar o no.
 
 1. **Pedir por voz:** el navegador transcribe lo que dice el paciente (Web Speech API, `es-ES`) y el backend lo interpreta (`POST /interpretar-voz`). Reconoce el nombre del medicamento aunque se pronuncie o transcriba con errores («omeprasol»), marcas comunes («Tylenol», «Advil») y el color de la bandeja («el azul»). Solo **preselecciona** el medicamento: la orden se confirma con **Dispensar**.
-2. **Escanear receta:** abre la cámara (en móvil/tablet) o el selector de archivos, muestra la foto y **Validar con IA** la envía a `POST /validar-receta`. Tesseract lee el texto y se busca el medicamento:
+2. **Escanear receta:** abre el selector de archivos (foto o PDF) y **Validar con IA** la envía a `POST /validar-receta`. Un PDF con texto se lee directo; una foto o un PDF escaneado pasa por Tesseract. Luego se busca el medicamento:
    - Con un medicamento seleccionado, se autoriza si la receta lo incluye.
    - Sin selección, se autoriza el medicamento que indique la receta y se preselecciona.
    - Si se rechaza, se muestra el motivo y el texto leído para que el personal lo revise.
@@ -167,7 +167,7 @@ Los medicamentos de cada bandeja y las palabras clave que los identifican en voz
 | `POST` | `/solicitar` | Body: `{"color": "rojo"}` o `{"color": "rojo", "receta_id": "…"}`. Ejecuta el robot y descuenta 1 unidad si la entrega tiene éxito |
 | `POST` | `/reponer` | Body: `{"stock": {"rojo": 1, "azul": 5}}`. Fija las unidades (0–20) de las bandejas indicadas; las demás no cambian. Sin body, devuelve todas al stock inicial (1). Responde `409` si hay una dispensación en curso |
 | `POST` | `/interpretar-voz` | Body: `{"texto": "quiero paracetamol"}`. Devuelve el `color` reconocido y la confianza; `422` si no hay un único medicamento claro |
-| `POST` | `/validar-receta` | `multipart/form-data` con `imagen` y, opcional, `color`. Devuelve `autorizado`, `motivo`, el fragmento detectado y el texto leído; `422` si no es una imagen, `413` si supera 10 MB, `503` si falta Tesseract |
+| `POST` | `/validar-receta` | `multipart/form-data` con `imagen` (foto o PDF) y, opcional, `color`. Devuelve `autorizado`, `motivo`, el fragmento detectado y el texto leído; `422` si no es una imagen ni un PDF, `413` si supera 10 MB, `503` si falta Tesseract (solo hace falta para fotos y PDF escaneados) |
 | `GET` | `/recetas?limit=50` | Historial de validaciones, la más reciente primero, con la hora de dispensación si se usó |
 
 Respuestas de `POST /solicitar`:

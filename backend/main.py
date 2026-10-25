@@ -227,19 +227,19 @@ def interpretar_voz(body: SolicitudVoz) -> RespuestaVoz:
     response_model=ValidacionReceta,
     responses={
         413: {"description": "Imagen demasiado grande"},
-        422: {"description": "El archivo no es una imagen válida"},
+        422: {"description": "El archivo no es una imagen ni un PDF válido"},
         503: {"description": "OCR no disponible en el servidor"},
     },
 )
 def validar_receta(
-    imagen: UploadFile = File(description="Foto de la receta"),
+    imagen: UploadFile = File(description="Foto o PDF de la receta"),
     color: ColorMedicamento | None = Form(
         default=None, description="Medicamento solicitado. Sin él, se autoriza el que indique la receta."
     ),
 ) -> ValidacionReceta:
     datos = imagen.file.read(MAX_IMAGEN_BYTES + 1)
     if len(datos) > MAX_IMAGEN_BYTES:
-        raise HTTPException(status_code=413, detail="La imagen supera los 10 MB.")
+        raise HTTPException(status_code=413, detail="El archivo supera los 10 MB.")
     try:
         texto = ocr_receta.extraer_texto(datos)
     except ocr_receta.ImagenInvalida as e:

@@ -120,14 +120,15 @@
                   </span>
                   <span class="assist-text">
                     <span class="assist-title">Escanear receta</span>
-                    <span class="assist-sub">Validación con IA</span>
+                    <span class="assist-sub">Foto o PDF</span>
                   </span>
                 </button>
-                <input type="file" id="rx-input" accept="image/*" capture="environment" hidden />
+                <input type="file" id="rx-input" accept="image/*,application/pdf,.pdf" hidden />
               </div>
               <p class="assist-status" id="assist-status" role="status" aria-live="polite" hidden></p>
               <div class="rx" id="rx-card" hidden>
                 <img class="rx-preview" id="rx-preview" alt="Vista previa de la receta" />
+                <span class="rx-preview rx-file" id="rx-file" hidden>PDF</span>
                 <div class="rx-body">
                   <div class="rx-head">
                     <span class="rx-title" id="rx-title"></span>

@@ -49,6 +49,7 @@ const els = {
   assistStatus: $("assist-status"),
   rxCard: $("rx-card"),
   rxPreview: $("rx-preview"),
+  rxFile: $("rx-file"),
   rxTitle: $("rx-title"),
   rxBadge: $("rx-badge"),
   rxDetail: $("rx-detail"),
@@ -358,7 +359,12 @@ function buildAsistenteUI() {
   els.rxInput.addEventListener("change", () => {
     const archivo = els.rxInput.files?.[0];
     els.rxInput.value = "";
-    if (archivo) capturarReceta(archivo);
+    if (!archivo) return;
+    if (!esReceta(archivo)) {
+      setAsistente("warning", "Use una foto (JPG o PNG) o un PDF.");
+      return;
+    }
+    capturarReceta(archivo);
   });
   els.rxValidate.addEventListener("click", validarReceta);
   els.rxDiscard.addEventListener("click", () => {
@@ -517,10 +523,26 @@ function pintarReceta(estado, titulo, detalle, { badge = null, ocr = null } = {}
   els.rxOcr.textContent = ocr ? `Texto leído: ${ocr}` : "";
 }
 
+function esReceta(archivo) {
+  const nombre = archivo.name.toLowerCase();
+  return archivo.type.startsWith("image/") || archivo.type === "application/pdf" || nombre.endsWith(".pdf");
+}
+
+function esPdf(archivo) {
+  return archivo.type === "application/pdf" || archivo.name.toLowerCase().endsWith(".pdf");
+}
+
 function capturarReceta(archivo) {
   descartarReceta();
   state.rxArchivo = archivo;
-  els.rxPreview.src = URL.createObjectURL(archivo);
+  if (esPdf(archivo)) {
+    els.rxPreview.hidden = true;
+    els.rxFile.hidden = false;
+  } else {
+    els.rxFile.hidden = true;
+    els.rxPreview.hidden = false;
+    els.rxPreview.src = URL.createObjectURL(archivo);
+  }
   const med = buscarMed(state.seleccion);
   pintarReceta(
     "pending",
@@ -535,6 +557,8 @@ function capturarReceta(archivo) {
 function descartarReceta() {
   if (els.rxPreview.src) URL.revokeObjectURL(els.rxPreview.src);
   els.rxPreview.removeAttribute("src");
+  els.rxPreview.hidden = false;
+  els.rxFile.hidden = true;
   els.rxCard.hidden = true;
   state.rxArchivo = null;
   state.receta = null;

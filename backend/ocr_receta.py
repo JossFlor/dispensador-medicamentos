@@ -48,17 +48,76 @@ class Evaluacion:
 
 
 def extraer_texto(datos: bytes) -> str:
+    if _es_pdf(datos):
+        return _texto_pdf(datos)
+    return _texto_imagen(datos)
+
+
+def _es_pdf(datos: bytes) -> bool:
+    return b"%PDF" in datos[:1024]
+
+
+def _texto_imagen(datos: bytes) -> str:
     try:
-        import pytesseract
-        from PIL import Image, ImageOps, UnidentifiedImageError
+        from PIL import Image, UnidentifiedImageError
     except ImportError as e:
         raise OCRNoDisponible("Faltan dependencias de OCR. Ejecute: pip install -r requirements.txt") from e
-
     try:
         img = Image.open(io.BytesIO(datos))
         img.load()
     except (UnidentifiedImageError, OSError) as e:
-        raise ImagenInvalida("El archivo no es una imagen válida.") from e
+        raise ImagenInvalida("El archivo no es una imagen ni un PDF válido.") from e
+    return _ocr_pil(img)
+
+
+def _texto_pdf(datos: bytes) -> str:
+    """Digital PDFs are read as text. A scan, with no text layer, is rendered and passed to OCR."""
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as e:
+        raise OCRNoDisponible("Faltan dependencias de OCR. Ejecute: pip install -r requirements.txt") from e
+    try:
+        doc = pdfium.PdfDocument(datos)
+    except Exception as e:
+        raise ImagenInvalida("El archivo no es un PDF válido.") from e
+    try:
+        total = len(doc)
+        if total == 0:
+            raise ImagenInvalida("El PDF no tiene páginas.")
+        n = min(total, 2)
+        textos = [_texto_pagina(doc[i]) for i in range(n)]
+        texto = "\n".join(textos)
+        if len("".join(texto.split())) >= 8:
+            return texto
+        return "\n".join(_ocr_pil(_render_pagina(doc[i])) for i in range(n))
+    finally:
+        doc.close()
+
+
+def _texto_pagina(page) -> str:
+    textpage = page.get_textpage()
+    try:
+        return textpage.get_text_bounded() or ""
+    finally:
+        textpage.close()
+        page.close()
+
+
+def _render_pagina(page):
+    bitmap = page.render(scale=2)
+    try:
+        return bitmap.to_pil()
+    finally:
+        bitmap.close()
+        page.close()
+
+
+def _ocr_pil(img) -> str:
+    try:
+        import pytesseract
+        from PIL import Image, ImageOps
+    except ImportError as e:
+        raise OCRNoDisponible("Faltan dependencias de OCR. Ejecute: pip install -r requirements.txt") from e
 
     img = ImageOps.autocontrast(ImageOps.grayscale(ImageOps.exif_transpose(img)))
     if img.width < ANCHO_MINIMO or img.width > ANCHO_MAXIMO:
@@ -91,7 +150,7 @@ def evaluar(texto: str, color: ColorMedicamento | None) -> Evaluacion:
     if not texto.strip():
         pedido = medicamentos.por_color(color) if color else None
         return Evaluacion(
-            False, pedido, "No se pudo leer texto en la imagen. Acerque la receta y use buena luz.", None, []
+            False, pedido, "No se pudo leer texto en la receta. Acerque la foto o suba un PDF con texto seleccionable.", None, []
         )
 
     encontrados = [med for med, _ in medicamentos.detectar(texto)]

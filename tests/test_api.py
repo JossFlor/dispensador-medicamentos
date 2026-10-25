@@ -371,6 +371,32 @@ def test_imagen_invalida_devuelve_422(client):
     assert validar(client, "rojo").status_code == 422
 
 
+def _pdf(texto: str) -> bytes:
+    contenido = f"BT /F1 18 Tf 40 90 Td ({texto}) Tj ET".encode()
+    return (
+        b"%PDF-1.4\n"
+        b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+        b"2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n"
+        b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 144]/Contents 4 0 R"
+        b"/Resources<</Font<</F1 5 0 R>>>>>>endobj\n"
+        b"4 0 obj<</Length " + str(len(contenido)).encode() + b">>stream\n" + contenido + b"\nendstream\nendobj\n"
+        b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\n"
+        b"trailer<</Root 1 0 R>>\n%%EOF\n"
+    )
+
+
+def test_pdf_con_texto_autoriza_sin_ocr(client):
+    res = client.post(
+        "/validar-receta",
+        files={"imagen": ("receta.pdf", _pdf("Paracetamol 500 mg"), "application/pdf")},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["autorizado"] is True
+    assert body["color"] == "rojo"
+    assert "Paracetamol" in body["texto_ocr"]
+
+
 def test_recetas_mas_recientes_primero(client, ocr):
     ocr["valor"] = "Paracetamol"
     primera = validar(client, "rojo").json()["id"]
